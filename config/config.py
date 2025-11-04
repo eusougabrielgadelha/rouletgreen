@@ -11,8 +11,8 @@ BLAZE_URL = "https://blaze.bet.br/pt/"
 DOUBLE_URL = "https://blaze.bet.br/pt/games/double"
 
 # Credenciais (configure exclusivamente via variáveis de ambiente)
-EMAIL = os.getenv("BLAZE_EMAIL", "")
-PASSWORD = os.getenv("BLAZE_PASSWORD", "")
+EMAIL = os.getenv("BLAZE_EMAIL", "gabrielgadelham@gmail.com")
+PASSWORD = os.getenv("BLAZE_PASSWORD", "inDubai2023*")
 
 # Configurações do navegador
 # Detecta automaticamente se está em servidor (sem display)
