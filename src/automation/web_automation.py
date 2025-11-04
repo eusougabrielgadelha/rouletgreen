@@ -158,19 +158,32 @@ class BlazeAutomation:
                     # Configurações para parecer mais humano
                     options.add_argument("--window-size=1920,1080")
                     options.add_argument("--start-maximized")
+                    
+                    # Opções CRÍTICAS para servidor headless Linux
                     options.add_argument("--no-sandbox")
                     options.add_argument("--disable-dev-shm-usage")
+                    options.add_argument("--disable-setuid-sandbox")
                     options.add_argument("--disable-gpu")
                     options.add_argument("--disable-software-rasterizer")
                     options.add_argument("--disable-extensions")
-                    options.add_argument("--disable-setuid-sandbox")
                     options.add_argument("--disable-web-security")
                     options.add_argument("--disable-features=VizDisplayCompositor")
-                    # Para servidor headless
+                    
+                    # Para servidor headless - IMPORTANTE: usar porta fixa
                     options.add_argument("--remote-debugging-port=9222")
+                    options.add_argument("--remote-allow-origins=*")
+                    
+                    # Evita crash do Chrome
                     options.add_argument("--disable-background-timer-throttling")
                     options.add_argument("--disable-backgrounding-occluded-windows")
                     options.add_argument("--disable-renderer-backgrounding")
+                    options.add_argument("--disable-ipc-flooding-protection")
+                    
+                    # Para evitar problemas de perfil/temp
+                    options.add_argument("--user-data-dir=/tmp/chrome-user-data")
+                    options.add_argument("--data-path=/tmp/chrome-data")
+                    options.add_argument("--homedir=/tmp")
+                    options.add_argument("--disk-cache-dir=/tmp/chrome-cache")
                     
                     # Desabilita notificações
                     prefs = {
@@ -181,13 +194,22 @@ class BlazeAutomation:
                     }
                     options.add_experimental_option("prefs", prefs)
                     
-                    # Inicializa undetected-chromedriver com timeout maior
+                    # Inicializa undetected-chromedriver com timeout maior e configurações específicas
+                    try:
+                        # Tenta criar diretórios temporários
+                        os.makedirs('/tmp/chrome-user-data', exist_ok=True)
+                        os.makedirs('/tmp/chrome-data', exist_ok=True)
+                        os.makedirs('/tmp/chrome-cache', exist_ok=True)
+                    except:
+                        pass
+                    
                     self.driver = uc.Chrome(
                         options=options,
                         version_main=None,  # Auto-detecta versão do Chrome
                         use_subprocess=True,
                         driver_executable_path=None,
-                        timeout=60  # Timeout maior para servidor headless
+                        timeout=120,  # Timeout maior para servidor headless (2 minutos)
+                        keep_alive=True  # Mantém conexão viva
                     )
                     
                     print("[SUCCESS] undetected-chromedriver inicializado com sucesso!")
