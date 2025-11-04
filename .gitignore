@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Banco de dados
+*.db
+*.sqlite
+*.sqlite3
+blaze_data.db
+
+# Variáveis de ambiente
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Selenium
+chromedriver
+geckodriver
+
+# OS
+.DS_Store
+Thumbs.db
+

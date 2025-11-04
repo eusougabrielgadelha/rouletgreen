@@ -1,0 +1,6 @@
+# Exemplo de configuração
+# Copie este arquivo para .env e preencha com suas credenciais
+
+BLAZE_EMAIL=seu_email@exemplo.com
+BLAZE_PASSWORD=sua_senha_aqui
+
