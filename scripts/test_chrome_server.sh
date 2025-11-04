@@ -91,7 +91,8 @@ DEPS_TO_CHECK=(
 )
 
 for dep in "${DEPS_TO_CHECK[@]}"; do
-    if ! dpkg -l | grep -q "^ii.*$dep "; then
+    # Verifica se o pacote está instalado (ii = instalado corretamente)
+    if ! dpkg -l "$dep" 2>/dev/null | grep -q "^ii.*$dep "; then
         MISSING_DEPS+=("$dep")
     fi
 done
