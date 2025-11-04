@@ -83,31 +83,29 @@ class BlazeAutomation:
             print("[INFO] Inicializando Playwright...")
             
             # Inicia Playwright de forma segura
+            # IMPORTANTE: Playwright sync API deve ser usado na mesma thread
+            # Se houver loop asyncio, não podemos usar thread separada
             try:
+                # Tenta iniciar normalmente
                 self.playwright = sync_playwright().start()
             except Exception as e:
-                if "asyncio" in str(e).lower():
-                    print("[AVISO] Conflito com asyncio detectado - tentando alternativa...")
-                    # Tenta criar nova thread para Playwright
-                    import threading
-                    playwright_result = {'success': False, 'playwright': None, 'error': None}
-                    
-                    def init_playwright_thread():
-                        try:
-                            playwright_result['playwright'] = sync_playwright().start()
-                            playwright_result['success'] = True
-                        except Exception as thread_error:
-                            playwright_result['error'] = thread_error
-                    
-                    thread = threading.Thread(target=init_playwright_thread)
-                    thread.daemon = True
-                    thread.start()
-                    thread.join(timeout=30)
-                    
-                    if playwright_result['success']:
-                        self.playwright = playwright_result['playwright']
-                    else:
-                        raise playwright_result['error'] if playwright_result['error'] else e
+                error_msg = str(e).lower()
+                if "asyncio" in error_msg:
+                    print("[AVISO] Conflito com asyncio detectado")
+                    print("[INFO] Tentando inicializar Playwright antes do loop asyncio...")
+                    # Se houver loop asyncio, tenta esperar ou usar alternativa
+                    # Mas não podemos usar thread separada devido a limitação do Playwright
+                    # A solução é inicializar o Playwright ANTES de qualquer coisa assíncrona
+                    raise Exception(
+                        "Playwright não pode ser inicializado dentro de um loop asyncio. "
+                        "Certifique-se de que o Playwright é inicializado antes de qualquer código assíncrono."
+                    )
+                elif "cannot switch" in error_msg or "thread" in error_msg:
+                    print("[AVISO] Erro de thread detectado")
+                    raise Exception(
+                        "Playwright sync API não pode ser usado entre threads diferentes. "
+                        "Certifique-se de que toda a inicialização do Playwright acontece na mesma thread."
+                    )
                 else:
                     raise
             
@@ -166,8 +164,14 @@ class BlazeAutomation:
             
             self.page = self.context.new_page()
             
-            # Compatibilidade: driver aponta para page
+            # Compatibilidade: driver aponta para page, mas adiciona método get() para compatibilidade
             self.driver = self.page
+            
+            # Adiciona método get() para compatibilidade com Selenium
+            def selenium_get(url):
+                return self.page.goto(url, wait_until='networkidle', timeout=60000)
+            
+            self.driver.get = selenium_get
             
             print("[SUCCESS] Playwright inicializado com sucesso!")
             return self.page

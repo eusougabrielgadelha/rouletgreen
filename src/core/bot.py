@@ -32,7 +32,10 @@ class BlazeBot:
         self.db = Database(config.DATABASE_PATH)
         self.analyzer = PatternAnalyzer(self.db)
         self.ui = UI()
-        self.telegram = TelegramNotifier()  # Inicializa notificador Telegram
+        # IMPORTANTE: NÃO inicializar TelegramNotifier aqui se usar Playwright
+        # TelegramNotifier usa asyncio que conflita com Playwright sync API
+        # Será inicializado depois do Playwright
+        self.telegram = None
         self.running = False
         self.last_game_id = None
         
