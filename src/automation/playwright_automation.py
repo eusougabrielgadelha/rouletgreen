@@ -430,6 +430,8 @@ class BlazeAutomation:
                 'cache_duration': 0.5
             }
             
+            # Atualiza indicador de atividade
+            self.last_activity_time = time.time()
             return results
             
         except Exception as e:
@@ -472,6 +474,8 @@ class BlazeAutomation:
                 }
             """)
             
+            # Atualiza indicador de atividade
+            self.last_activity_time = time.time()
             return state_js
             
         except Exception as e:
@@ -517,6 +521,8 @@ class BlazeAutomation:
                 }
             """)
             
+            if result_js:
+                self.last_activity_time = time.time()
             return result_js or {'color': None, 'number': None}
             
         except Exception as e:
@@ -653,9 +659,11 @@ class BlazeAutomation:
     def is_chrome_responsive(self, timeout: float = 5.0) -> bool:
         """Verifica se o navegador está respondendo"""
         try:
+            if not self.page or self.page.is_closed():
+                return False
             self.page.evaluate('() => true', timeout=int(timeout * 1000))
             return True
-        except:
+        except Exception:
             return False
     
     def restart_chrome(self) -> bool:
@@ -671,22 +679,27 @@ class BlazeAutomation:
     def soft_recover(self, navigate: bool = True) -> bool:
         """Tenta recuperar sem recriar Playwright (mesmo processo/contexto).
         - Fecha e reabre apenas a página dentro do mesmo context
+        - Se necessário, recria o contexto dentro do mesmo browser
         - Reatribui self.driver
         - Opcionalmente navega até a URL principal e/ou Double
         """
         try:
             if not self.browser:
                 return False
-            if not self.context:
-                # recria contexto sem parar playwright
-                self.context = self.browser.new_context(
-                    viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                    locale='pt-BR',
-                    timezone_id='America/Sao_Paulo',
-                    permissions=['notifications'],
-                    ignore_https_errors=True,
-                )
+            # sempre recria o contexto para limpar estado corrompido
+            try:
+                if self.context:
+                    self.context.close()
+            except Exception:
+                pass
+            self.context = self.browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                locale='pt-BR',
+                timezone_id='America/Sao_Paulo',
+                permissions=['notifications'],
+                ignore_https_errors=True,
+            )
             # fecha página antiga
             try:
                 if self.page:
@@ -703,6 +716,9 @@ class BlazeAutomation:
                     time.sleep(2)
                     self.accept_cookies()
                     self.confirm_age()
+                    # tenta ir ao Double
+                    self._goto_with_retry(config.DOUBLE_URL, attempts=2)
+                    time.sleep(2)
                 except Exception:
                     pass
 

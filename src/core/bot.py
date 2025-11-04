@@ -351,9 +351,11 @@ class BlazeBot:
     def run(self):
         """Loop principal do bot com execução paralela e sistema de recuperação"""
         # Configurações de recuperação
-        MAX_INACTIVITY_TIME = 30  # Segundos sem resposta antes de reiniciar
+        MAX_INACTIVITY_TIME = 30  # Segundos sem resposta antes de recuperar
         CHROME_CHECK_INTERVAL = 10  # Verifica Chrome a cada 10 segundos
         last_chrome_check = 0
+        recovery_attempts = 0
+        next_recovery_allowed_at = 0
         
         # Loop de inicialização com recuperação
         max_init_retries = 3
@@ -417,12 +419,18 @@ class BlazeBot:
                     if current_time - last_chrome_check >= CHROME_CHECK_INTERVAL:
                         last_chrome_check = current_time
                         
-                        if not self.automation.is_chrome_responsive(timeout=5.0):
+                        unresponsive = not self.automation.is_chrome_responsive(timeout=5.0)
+                        inactive = (current_time - getattr(self.automation, 'last_activity_time', current_time)) > MAX_INACTIVITY_TIME
+                        if unresponsive or inactive:
                             self.ui.print_warning("Chrome não está respondendo - tentando recuperar...")
                             
                             if not config.AUTO_RECOVERY_ENABLED:
                                 self.ui.print_warning("Recuperação automática desativada - mantendo sessão atual")
                             else:
+                                if current_time < next_recovery_allowed_at:
+                                    # ainda em backoff
+                                    pass
+                                else:
                                 # Recuperação suave (não recria Playwright)
                                 self.ui.print_info("Tentando recuperação suave do navegador...")
                                 if self.automation.reinitialize_with_login_retry(
@@ -431,14 +439,18 @@ class BlazeBot:
                                     max_retries=1
                                 ):
                                     self.ui.print_success("Navegador recuperado com sucesso")
+                                        recovery_attempts = 0
+                                        next_recovery_allowed_at = 0
                                     if not self.analyzer_thread.is_alive():
                                         self.analyzer_thread = threading.Thread(target=self.analyzer_loop, daemon=True)
                                         self.analyzer_thread.start()
                                 else:
                                     self.ui.print_error("Falha na recuperação suave. Ignorando reinicialização completa para evitar conflito com asyncio.")
-                                    # Não chama initialize()/restart para não recriar Playwright
-                                    time.sleep(3)
-                                    continue
+                                        recovery_attempts += 1
+                                        backoff = min(60.0, config.RECOVERY_BACKOFF_BASE * recovery_attempts)
+                                        next_recovery_allowed_at = current_time + backoff
+                                        time.sleep(1)
+                                        continue
                         
                         # Verifica se ainda está logado (se tinha tentado fazer login)
                         if self.automation.login_attempted:

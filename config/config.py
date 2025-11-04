@@ -47,6 +47,8 @@ UI_UPDATE_INTERVAL = 0.5  # Intervalo de atualização da UI em segundos
 
 # Recuperação automática (reinicializações). Se houver conflito com asyncio/Playwright, defina como false
 AUTO_RECOVERY_ENABLED = os.getenv('AUTO_RECOVERY_ENABLED', 'true').lower() == 'true'
+RECOVERY_MAX_ATTEMPTS = int(os.getenv('RECOVERY_MAX_ATTEMPTS', '3'))
+RECOVERY_BACKOFF_BASE = float(os.getenv('RECOVERY_BACKOFF_BASE', '3.0'))  # segundos
 
 # Cores do jogo
 COLORS = {
