@@ -203,7 +203,7 @@ class BlazeAutomation:
                                          capture_output=True, timeout=2)
                             subprocess.run(['pkill', '-f', 'chromedriver'], 
                                          capture_output=True, timeout=2)
-                            time.sleep(1)
+                            time.sleep(2)
                         except:
                             pass
                         
@@ -212,6 +212,14 @@ class BlazeAutomation:
                         os.makedirs('/tmp/chrome-user-data', exist_ok=True)
                         os.makedirs('/tmp/chrome-data', exist_ok=True)
                         os.makedirs('/tmp/chrome-cache', exist_ok=True)
+                        
+                        # Garante permissões corretas
+                        try:
+                            os.chmod('/tmp/chrome-user-data', 0o755)
+                            os.chmod('/tmp/chrome-data', 0o755)
+                            os.chmod('/tmp/chrome-cache', 0o755)
+                        except:
+                            pass
                         
                         # Limpa diretórios antigos se estiverem muito grandes
                         try:
@@ -226,19 +234,75 @@ class BlazeAutomation:
                                         print(f"[INFO] Limpando diretório grande: {dir_path} ({total_size / 1024 / 1024:.1f}MB)")
                                         shutil.rmtree(dir_path)
                                         os.makedirs(dir_path, exist_ok=True)
+                                        os.chmod(dir_path, 0o755)
                         except:
                             pass
                         
-                        print("[INFO] Inicializando undetected-chromedriver (timeout: 120s)...")
-                        print("[INFO] Isso pode levar até 2 minutos no servidor headless...")
+                        # TESTE CRÍTICO: Verifica se Chrome consegue executar em modo headless
+                        print("[INFO] Testando execução do Chrome em modo headless...")
+                        try:
+                            import subprocess
+                            test_result = subprocess.run(
+                                [chrome_binary, '--headless=new', '--no-sandbox', '--disable-gpu', 
+                                 '--disable-dev-shm-usage', '--remote-debugging-port=9222',
+                                 '--user-data-dir=/tmp/chrome-test', '--data-path=/tmp/chrome-test-data',
+                                 '--homedir=/tmp', '--disk-cache-dir=/tmp/chrome-test-cache',
+                                 '--dump-dom', 'about:blank'],
+                                capture_output=True,
+                                text=True,
+                                timeout=10
+                            )
+                            if test_result.returncode != 0 and test_result.returncode != 1:  # 0 ou 1 são OK
+                                print(f"[AVISO] Chrome test falhou com código: {test_result.returncode}")
+                                print(f"[AVISO] stderr: {test_result.stderr[:200]}")
+                            else:
+                                print("[SUCCESS] Chrome test passou - Chrome consegue executar em headless")
+                        except subprocess.TimeoutExpired:
+                            print("[AVISO] Chrome test timeout - pode ser normal")
+                        except Exception as test_error:
+                            print(f"[AVISO] Chrome test erro (continuando): {test_error}")
+                        
+                        # Limpa diretórios de teste
+                        try:
+                            import shutil
+                            for test_dir in ['/tmp/chrome-test', '/tmp/chrome-test-data', '/tmp/chrome-test-cache']:
+                                if os.path.exists(test_dir):
+                                    shutil.rmtree(test_dir, ignore_errors=True)
+                        except:
+                            pass
+                        
+                        print("[INFO] Inicializando undetected-chromedriver (timeout: 180s)...")
+                        print("[INFO] Isso pode levar até 3 minutos no servidor headless...")
+                        
+                        # Usa opções mais simples e confiáveis para servidor headless
+                        # Remove algumas opções que podem causar problemas
+                        simple_options = uc.ChromeOptions()
+                        if self.headless:
+                            simple_options.add_argument("--headless=new")
+                        if chrome_binary:
+                            simple_options.binary_location = chrome_binary
+                        
+                        # Opções MÍNIMAS e ESSENCIAIS para servidor headless
+                        simple_options.add_argument("--no-sandbox")
+                        simple_options.add_argument("--disable-dev-shm-usage")
+                        simple_options.add_argument("--disable-setuid-sandbox")
+                        simple_options.add_argument("--disable-gpu")
+                        simple_options.add_argument("--remote-debugging-port=9222")
+                        simple_options.add_argument("--remote-allow-origins=*")
+                        simple_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
+                        simple_options.add_argument("--window-size=1920,1080")
+                        simple_options.add_argument("--disable-blink-features=AutomationControlled")
+                        
+                        # User agent básico
+                        simple_options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
                         
                         self.driver = uc.Chrome(
-                            options=options,
-                            version_main=None,  # Auto-detecta versão do Chrome
+                            options=simple_options,
+                            version_main=None,
                             use_subprocess=True,
                             driver_executable_path=None,
-                            timeout=120,  # Timeout maior para servidor headless (2 minutos)
-                            keep_alive=True  # Mantém conexão viva
+                            timeout=180,  # Timeout ainda maior (3 minutos)
+                            keep_alive=False  # Não manter vivo pode ajudar em alguns casos
                         )
                         
                         print("[SUCCESS] undetected-chromedriver inicializado com sucesso!")
