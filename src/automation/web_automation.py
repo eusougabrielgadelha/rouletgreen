@@ -76,8 +76,7 @@ class BlazeAutomation:
                             [path, '--headless', '--disable-gpu', '--no-sandbox', '--version'],
                             capture_output=True,
                             text=True,
-                            timeout=10,
-                            stderr=subprocess.DEVNULL
+                            timeout=10
                         )
                         if test_result.returncode == 0:
                             chrome_binary = path
@@ -110,8 +109,7 @@ class BlazeAutomation:
                                         [found_path, '--headless', '--disable-gpu', '--no-sandbox', '--version'],
                                         capture_output=True,
                                         text=True,
-                                        timeout=10,
-                                        stderr=subprocess.DEVNULL
+                                        timeout=10
                                     )
                                     if test_result.returncode == 0:
                                         chrome_binary = found_path
@@ -134,7 +132,14 @@ class BlazeAutomation:
                 print("[INFO] Ou instalar dependências: sudo apt install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libxshmfence1 libxss1 libgconf-2-4 libpangocairo-1.0-0 libatk1.0-0 libcairo-gobject2 libgtk-3-0 libgdk-pixbuf2.0-0")
             
             # Prioriza usar undetected-chromedriver se disponível (melhor para bypass)
-            if UC_AVAILABLE:
+            # Verifica novamente se está disponível (pode ter sido instalado após import inicial)
+            try:
+                import undetected_chromedriver as uc
+                UC_AVAILABLE_NOW = True
+            except ImportError:
+                UC_AVAILABLE_NOW = False
+            
+            if UC_AVAILABLE or UC_AVAILABLE_NOW:
                 print("[INFO] Usando undetected-chromedriver para melhor bypass do Cloudflare...")
                 try:
                     options = uc.ChromeOptions()
@@ -453,26 +458,32 @@ class BlazeAutomation:
                         except Exception as test_error:
                             diagnostics.append(f"- Erro ao testar Chrome: {test_error}")
                     
-                    # Verifica dependências faltando
+                    # Verifica dependências faltando (verifica múltiplos nomes possíveis)
                     try:
                         import subprocess
                         missing_deps = []
+                        # Verifica com nomes antigos e novos (Ubuntu 24.04+ usa t64)
                         deps_to_check = {
-                            'libnss3': 'libnss3',
-                            'libatk-bridge2.0-0': 'libatk-bridge2.0-0',
-                            'libgbm1': 'libgbm1',
-                            'libxss1': 'libxss1',
-                            'libgtk-3-0': 'libgtk-3-0'
+                            'libnss3': ['libnss3'],
+                            'libatk-bridge2.0-0': ['libatk-bridge2.0-0', 'libatk-bridge2.0-0t64'],
+                            'libgbm1': ['libgbm1'],
+                            'libxss1': ['libxss1'],
+                            'libgtk-3-0': ['libgtk-3-0', 'libgtk-3-0t64']
                         }
-                        for key, pkg in deps_to_check.items():
-                            result = subprocess.run(
-                                ['dpkg', '-l', pkg],
-                                capture_output=True,
-                                text=True,
-                                timeout=2
-                            )
-                            if 'ii' not in result.stdout:  # 'ii' = instalado corretamente
-                                missing_deps.append(pkg)
+                        for key, pkg_names in deps_to_check.items():
+                            found = False
+                            for pkg in pkg_names:
+                                result = subprocess.run(
+                                    ['dpkg', '-l', pkg],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=2
+                                )
+                                if 'ii' in result.stdout:  # 'ii' = instalado corretamente
+                                    found = True
+                                    break
+                            if not found:
+                                missing_deps.append(pkg_names[0])  # Adiciona o nome padrão
                         if missing_deps:
                             diagnostics.append(f"- Dependências faltando: {', '.join(missing_deps)}")
                             diagnostics.append(f"  Instale com: sudo apt install -y {' '.join(missing_deps)}")
@@ -480,7 +491,10 @@ class BlazeAutomation:
                         pass
                     
                     # Verifica se undetected-chromedriver está instalado
-                    if not UC_AVAILABLE:
+                    try:
+                        import undetected_chromedriver as uc
+                        diagnostics.append("- undetected-chromedriver está instalado")
+                    except ImportError:
                         diagnostics.append("- undetected-chromedriver não está instalado")
                         diagnostics.append("  Instale com: pip install undetected-chromedriver")
                     
