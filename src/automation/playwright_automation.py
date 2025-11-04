@@ -87,6 +87,8 @@ class BlazeAutomation:
         
         # Compatibilidade: driver aponta para page (para código existente)
         self.driver = None  # Será definido como self.page após init
+        # Armazena user-agent usado no contexto (para requisições API)
+        self.current_user_agent = None
     
     def _init_proxy_list(self):
         """Inicializa lista de proxies para rotação."""
@@ -211,6 +213,8 @@ class BlazeAutomation:
             ]
             chosen_ua = random.choice(ua_pool)
             chosen_vp = random.choice(vp_pool)
+            # Armazena user-agent para uso posterior em requisições API
+            self.current_user_agent = chosen_ua
 
             # Headers HTTP mais realistas
             extra_headers = {
@@ -640,8 +644,18 @@ class BlazeAutomation:
                 x_client_version = 'b17dbb1d7'
                 x_session_id = 'null'
             
-            # Obtém user-agent atual do contexto
-            user_agent = self.context.user_agent if self.context else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+            # Obtém user-agent (armazenado ou da página)
+            user_agent = None
+            if self.current_user_agent:
+                user_agent = self.current_user_agent
+            elif self.page:
+                try:
+                    user_agent = self.page.evaluate('() => navigator.userAgent')
+                except Exception:
+                    pass
+            if not user_agent:
+                # Fallback padrão
+                user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
             
             # Obtém sec-ch-ua dinamicamente baseado no user-agent
             if 'Chrome/142' in user_agent or 'Chrome/131' in user_agent:
@@ -1277,9 +1291,25 @@ class BlazeAutomation:
                     self.context.close()
             except Exception:
                 pass
+            # Randomiza user-agent e viewport (mesmo padrão do init_driver)
+            ua_pool = [
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+            ]
+            vp_pool = [
+                {'width': 1920, 'height': 1080},
+                {'width': 1600, 'height': 900},
+                {'width': 1366, 'height': 768},
+            ]
+            chosen_ua = random.choice(ua_pool)
+            chosen_vp = random.choice(vp_pool)
+            # Armazena user-agent para uso posterior
+            self.current_user_agent = chosen_ua
+            
             self.context = self.browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                viewport=chosen_vp,
+                user_agent=chosen_ua,
                 locale='pt-BR',
                 timezone_id='America/Sao_Paulo',
                 permissions=['notifications'],
