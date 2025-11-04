@@ -1,6 +1,7 @@
 selenium==4.15.2
 webdriver-manager==4.0.1
 undetected-chromedriver==3.5.4
+setuptools>=65.5.0  # Necessário para distutils em Python 3.12+
 beautifulsoup4==4.12.2
 rich==13.7.0
 colorama==0.4.6
