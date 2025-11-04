@@ -22,6 +22,7 @@ except ImportError:
 root_dir = os.path.join(os.path.dirname(__file__), '..', '..')
 sys.path.insert(0, os.path.abspath(root_dir))
 from config import config
+from src.utils.roulette import normalize_result
 
 
 class BlazeAutomation:
@@ -370,9 +371,9 @@ class BlazeAutomation:
             if not newest_first:
                 sliced = list(reversed(sliced))
 
-            # Converte para formato esperado
+            # Converte e normaliza (white => number=0; corrige inconsistências)
             for item in sliced:
-                results.append({'color': item.get('color'), 'number': item.get('number')})
+                results.append(normalize_result({'color': item.get('color'), 'number': item.get('number')}))
             
             # Atualiza cache
             self._results_cache = {
@@ -453,7 +454,7 @@ class BlazeAutomation:
             
             if result_js:
                 self.last_activity_time = time.time()
-            return result_js or {'color': None, 'number': None}
+            return normalize_result(result_js) if result_js else {'color': None, 'number': None}
             
         except Exception as e:
             print(f"[AVISO] Erro ao obter resultado atual: {e}")
