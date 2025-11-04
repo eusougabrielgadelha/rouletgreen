@@ -15,7 +15,12 @@ EMAIL = os.getenv("BLAZE_EMAIL", "gabrielgadelham@gmail.com")
 PASSWORD = os.getenv("BLAZE_PASSWORD", "inDubai2023*")
 
 # Configurações do navegador
-HEADLESS = False  # True para rodar sem interface gráfica
+# Detecta automaticamente se está em servidor (sem display)
+import os
+if not os.getenv('DISPLAY') or os.getenv('DISPLAY') == '':
+    HEADLESS = True  # Servidor sem display - força headless
+else:
+    HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'  # Pode ser sobrescrito via .env
 WAIT_TIME = 2  # Tempo de espera padrão em segundos
 
 # Configurações de aposta
