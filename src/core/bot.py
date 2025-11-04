@@ -413,9 +413,9 @@ class BlazeBot:
                 try:
                     current_time = time.time()
                     
-                    # Espera um novo resultado via MutationObserver (sem polling pesado)
-                    # Isso sinaliza a transição de rodada: novo resultado chegou -> janela de apostas abre
-                    self.automation.wait_for_recent_results_change(timeout=20.0)
+                    # Espera mudança de resultados em fatias curtas para manter o heartbeat e responsividade
+                    # (evita ficar bloqueado por longos períodos dentro do evaluate)
+                    self.automation.wait_for_recent_results_change(timeout=2.0)
 
                     # Sistema de recuperação: verifica se Chrome está respondendo
                     if current_time - last_chrome_check >= CHROME_CHECK_INTERVAL:

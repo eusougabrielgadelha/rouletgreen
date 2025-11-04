@@ -173,6 +173,13 @@ class BlazeAutomation:
             
             self.driver.get = selenium_get
             
+            # Handlers para diagnosticar travamentos e fechamentos de página/contexto
+            try:
+                self.page.on('crash', lambda _: print('[ERRO] Página crashou (event: crash)'))
+                self.page.on('close', lambda _: print('[AVISO] Página fechada (event: close)'))
+            except Exception:
+                pass
+
             print("[SUCCESS] Playwright inicializado com sucesso!")
             return self.page
             
@@ -617,7 +624,14 @@ class BlazeAutomation:
         try:
             if not self.page or self.page.is_closed():
                 return False
+            start_t = time.time()
             self.page.evaluate('() => true', timeout=int(timeout * 1000))
+            elapsed = time.time() - start_t
+            # Atualiza último heartbeat/atividade
+            self.last_activity_time = time.time()
+            # Se a resposta do heartbeat foi muito lenta, sinaliza degradação
+            if elapsed > max(1.5, timeout * 0.8):
+                print(f"[AVISO] Heartbeat lento: {elapsed:.2f}s")
             return True
         except Exception:
             return False
