@@ -72,6 +72,9 @@ class BlazeBot:
         if self.telegram is None:
             try:
                 self.telegram = TelegramNotifier()
+                # Envia mensagem de boas-vindas já na fase inicial (antes do Playwright)
+                if getattr(self.telegram, 'enabled', False):
+                    self.telegram.send_welcome_message()
             except Exception as e:
                 self.ui.print_warning(f"Falha ao inicializar Telegram: {e}")
                 # Continua mesmo sem Telegram
@@ -382,14 +385,7 @@ class BlazeBot:
             self.ui.print_warning("Status: Não logado (modo sem login)")
         self.ui.print_separator()
         
-        # Envia mensagem de boas-vindas no Telegram
-        print("\n[INFO] Verificando Telegram...")
-        print(f"[INFO] Telegram habilitado: {getattr(self.telegram, 'enabled', False)}")
-        if getattr(self.telegram, 'enabled', False):
-            print("[INFO] Enviando mensagem de boas-vindas...")
-            self.telegram.send_welcome_message()
-        else:
-            print("[AVISO] Telegram não está habilitado. Verifique a configuração em config.py")
+        # Telegram já foi inicializado e a mensagem de boas-vindas enviada acima
         
         # Inicia apenas a thread de análise.
         # IMPORTANTE: Playwright (sync API) não é thread-safe; todas as chamadas devem ocorrer na mesma thread
