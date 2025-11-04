@@ -241,116 +241,70 @@ class BlazeAutomation:
     def login(self, email: str, password: str) -> bool:
         """Realiza login"""
         try:
-            # Clica no botão de login
-            login_selectors = [
-                'button:has-text("Entrar")',
-                'a:has-text("Entrar")',
-                '[data-testid*="login"]',
-                '.login-button',
-            ]
-            
-            login_button = None
-            for selector in login_selectors:
-                try:
-                    login_button = self.page.wait_for_selector(selector, timeout=5000)
-                    if login_button:
-                        login_button.click()
-                        time.sleep(2)
-                        break
-                except:
-                    continue
-            
-            if not login_button:
-                return False
-            
-            # Aguarda modal de login aparecer
-            time.sleep(2)
-            
-            # Preenche email
-            email_selectors = [
-                'input[type="email"]',
-                'input[name="email"]',
-                'input[placeholder*="email"]',
-                '#email',
-            ]
-            
-            for selector in email_selectors:
-                try:
-                    email_input = self.page.wait_for_selector(selector, timeout=3000)
-                    if email_input:
-                        # Limpa e digita caracter por caracter (simula humano)
-                        try:
-                            email_input.fill('')
-                        except Exception:
-                            pass
-                        for char in email:
-                            email_input.type(char, delay=random.randint(50, 150))
-                        break
-                except:
-                    continue
-            
-            time.sleep(1)
-            
-            # Preenche senha
-            password_selectors = [
-                'input[type="password"]',
-                'input[name="password"]',
-                '#password',
-            ]
-            
-            for selector in password_selectors:
-                try:
-                    password_input = self.page.wait_for_selector(selector, timeout=3000)
-                    if password_input:
-                        try:
-                            password_input.fill('')
-                        except Exception:
-                            pass
-                        for char in password:
-                            password_input.type(char, delay=random.randint(50, 150))
-                        break
-                except:
-                    continue
-            
-            # Aguarda Cloudflare Turnstile (se existir)
-            time.sleep(3)
-            
-            # Tenta clicar no Turnstile (se necessário)
+            # Abre diretamente o modal de login (mais confiável)
             try:
-                turnstile_iframe = self.page.wait_for_selector('iframe[title*="cloudflare"], iframe[title*="challenge"]', timeout=3000)
-                if turnstile_iframe:
-                    # Clica no iframe do Turnstile
-                    frame = turnstile_iframe.content_frame()
-                    if frame:
-                        checkbox = frame.wait_for_selector('input[type="checkbox"], .cb-container', timeout=5000)
-                        if checkbox:
-                            checkbox.click()
-                            time.sleep(2)
-            except:
-                pass
-            
-            # Submete formulário
-            submit_selectors = [
-                'button[type="submit"]',
-                'button:has-text("Entrar")',
-                'button:has-text("Login")',
-                'form button[type="submit"]',
-            ]
-            
-            for selector in submit_selectors:
+                self._goto_with_retry(config.DOUBLE_URL + '?modal=auth&tab=login', attempts=2)
+            except Exception:
                 try:
-                    submit_button = self.page.wait_for_selector(selector, timeout=3000)
-                    if submit_button and submit_button.is_enabled():
-                        submit_button.click()
-                        time.sleep(3)
-                        
-                        # Verifica se login foi bem-sucedido
-                        if self.check_if_logged_in():
-                            return True
-                        break
-                except:
-                    continue
-            
+                    self._goto_with_retry(config.BLAZE_URL + '?modal=auth&tab=login', attempts=2)
+                except Exception:
+                    pass
+
+            # Aguarda o modal de login
+            try:
+                self.page.wait_for_selector('#auth-modal, [data-modal-type="auth"]', timeout=8000)
+            except Exception:
+                pass
+
+            # Seletores específicos do modal informado
+            username_selector = '#auth-modal input[name="username"], [data-modal-type="auth"] input[name="username"]'
+            password_selector = '#auth-modal input[name="password"], [data-modal-type="auth"] input[name="password"]'
+            submit_selector = '#auth-modal button.red.submit, [data-modal-type="auth"] button.red.submit'
+
+            # Preenche usuário/email
+            try:
+                email_input = self.page.wait_for_selector(username_selector, timeout=5000)
+                if not email_input:
+                    return False
+                try:
+                    email_input.fill('')
+                except Exception:
+                    pass
+                for ch in email:
+                    email_input.type(ch, delay=random.randint(40, 100))
+            except Exception:
+                return False
+
+            # Preenche senha
+            try:
+                password_input = self.page.wait_for_selector(password_selector, timeout=5000)
+                if not password_input:
+                    return False
+                try:
+                    password_input.fill('')
+                except Exception:
+                    pass
+                for ch in password:
+                    password_input.type(ch, delay=random.randint(40, 100))
+            except Exception:
+                return False
+
+            # Pequena espera para Turnstile preencher token (se já liberado)
+            time.sleep(2)
+
+            # Clica no botão "Entrar" do modal (type=button)
+            try:
+                submit_button = self.page.wait_for_selector(submit_selector, timeout=5000)
+                if submit_button and submit_button.is_enabled():
+                    submit_button.click()
+            except Exception:
+                pass
+
+            # Aguarda navegação/estado logado
+            time.sleep(3)
+            if self.check_if_logged_in():
+                return True
+
             return False
             
         except Exception as e:
