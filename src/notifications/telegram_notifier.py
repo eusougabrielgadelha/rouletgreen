@@ -53,10 +53,16 @@ class TelegramNotifier:
                 print(f"[INFO] Chat ID: {config.TELEGRAM_CHAT_ID}")
                 
                 self.bot = Bot(token=config.TELEGRAM_TOKEN)
-                # Testa conexão
+                # Testa conexão sem bloquear o event loop existente
                 print(f"[INFO] Testando conexão com Telegram...")
-                asyncio.run(self._test_connection())
-                print(f"[SUCCESS] Telegram Bot inicializado com sucesso!")
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Já há loop rodando: agenda teste em background
+                    loop.create_task(self._test_connection())
+                except RuntimeError:
+                    # Não há loop: podemos rodar sincrono
+                    asyncio.run(self._test_connection())
+                print(f"[SUCCESS] Telegram Bot inicializado (teste agendado/realizado)")
             except Exception as e:
                 print(f"[ERRO] Erro ao inicializar Telegram: {e}")
                 import traceback
@@ -142,8 +148,15 @@ class TelegramNotifier:
             return False
         
         try:
-            # Tenta enviar a mensagem
-            result = asyncio.run(self._send_message_async(message, parse_mode))
+            # Tenta enviar a mensagem respeitando o estado do event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Loop ativo: agenda o envio e retorna True otimista
+                loop.create_task(self._send_message_async(message, parse_mode))
+                result = True
+            except RuntimeError:
+                # Sem loop: podemos executar de forma síncrona
+                result = asyncio.run(self._send_message_async(message, parse_mode))
             if result:
                 print(f"[SUCCESS] Mensagem enviada ao Telegram")
             else:
