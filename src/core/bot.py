@@ -425,6 +425,13 @@ class BlazeBot:
                         unresponsive = not self.automation.is_chrome_responsive(timeout=5.0)
                         inactive = (current_time - getattr(self.automation, 'last_activity_time', current_time)) > MAX_INACTIVITY_TIME
                         if (unresponsive or inactive) and current_time >= getattr(self, 'recovery_cooldown_until', 0):
+                            # Se estamos em cooldown pós-challenge, evita recuperar agressivamente
+                            try:
+                                if getattr(self.automation, 'challenge_cooldown_until', 0) > time.time():
+                                    self.ui.print_warning("Cooldown pós-challenge ativo - adiando recuperação")
+                                    continue
+                            except Exception:
+                                pass
                             # Diagnóstico antes da recuperação
                             try:
                                 diag = self.automation.get_diagnostic_summary()

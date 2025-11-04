@@ -61,6 +61,10 @@ class BlazeAutomation:
         self.last_human_action_time = 0.0
         # Anti-bot strikes
         self.antibot_strikes = 0
+        # Cooldown pós-challenge (reduz consultas/recuperações imediatas)
+        self.challenge_cooldown_until = 0.0
+        # Caminho para persistir cookies/session
+        self.storage_state_path = os.path.join(os.path.abspath(root_dir), 'storage_state.json')
         
         # Cache de resultados para performance
         self._results_cache = {
@@ -169,8 +173,8 @@ class BlazeAutomation:
                 'Cache-Control': 'max-age=0',
             }
             
-            # Cria contexto com configurações de stealth
-            self.context = self.browser.new_context(
+            # Define storage_state se existir
+            context_kwargs = dict(
                 viewport=chosen_vp,
                 user_agent=chosen_ua,
                 locale='pt-BR',
@@ -179,6 +183,14 @@ class BlazeAutomation:
                 ignore_https_errors=True,
                 extra_http_headers=extra_headers,
             )
+            try:
+                if os.path.exists(self.storage_state_path):
+                    context_kwargs['storage_state'] = self.storage_state_path
+            except Exception:
+                pass
+
+            # Cria contexto com configurações de stealth
+            self.context = self.browser.new_context(**context_kwargs)
             
             # Injeta scripts de stealth avançados no contexto
             self.context.add_init_script("""
@@ -262,6 +274,12 @@ class BlazeAutomation:
             """)
             
             self.page = self.context.new_page()
+
+            # Intercepta endpoints ruidosos/irrelevantes
+            try:
+                self.page.route('**/api/singleplayer-originals/originals/free-bets', lambda route: route.abort())
+            except Exception:
+                pass
             
             # Compatibilidade: driver aponta para page, mas adiciona método get() para compatibilidade
             self.driver = self.page
@@ -460,6 +478,11 @@ class BlazeAutomation:
             except Exception:
                 pass
             if self.check_if_logged_in():
+                # Persiste storage state para próximas inicializações
+                try:
+                    self.context.storage_state(path=self.storage_state_path)
+                except Exception:
+                    pass
                 return True
 
             return False
@@ -502,6 +525,11 @@ class BlazeAutomation:
         newest_first=True retorna o mais recente no índice 0.
         """
         try:
+            # Se em cooldown pós-challenge, aumenta cache e evita hammer
+            if time.time() < getattr(self, 'challenge_cooldown_until', 0):
+                self._results_cache['cache_duration'] = 2.0
+                if check_changes and time.time() - self._results_cache['timestamp'] < self._results_cache['cache_duration']:
+                    return self._results_cache['results']
             # Verifica cache
             if check_changes and time.time() - self._results_cache['timestamp'] < self._results_cache['cache_duration']:
                 return self._results_cache['results']
@@ -542,10 +570,14 @@ class BlazeAutomation:
                 results.append(normalize_result({'color': item.get('color'), 'number': item.get('number')}))
             
             # Atualiza cache
+            # Ajusta cache conforme cooldown
+            cache_duration = 0.5
+            if time.time() < getattr(self, 'challenge_cooldown_until', 0):
+                cache_duration = 2.0
             self._results_cache = {
                 'timestamp': time.time(),
                 'results': results,
-                'cache_duration': 0.5
+                'cache_duration': cache_duration
             }
             
             # Atualiza indicador de atividade
@@ -559,6 +591,9 @@ class BlazeAutomation:
     def get_current_game_state(self, check_changes: bool = False) -> dict:
         """Obtém estado atual do jogo"""
         try:
+            # Em cooldown pós-challenge: faz leitura menos agressiva (uma pequena espera)
+            if time.time() < getattr(self, 'challenge_cooldown_until', 0):
+                time.sleep(0.2)
             state_js = self.page.evaluate("""
                 () => {
                     const state = { timer: null, status: 'waiting', can_bet: false };
@@ -826,6 +861,8 @@ class BlazeAutomation:
                 if resolved:
                     print("[SUCCESS] Challenge resolvido")
                     self.antibot_strikes = max(0, self.antibot_strikes - 3)  # Reduz strikes após resolver
+                    # Define cooldown pós-challenge (reduz intensidade de leituras/recuperações)
+                    self.challenge_cooldown_until = time.time() + 45.0
                     time.sleep(random.uniform(1.0, 2.0))
                     return True
                 
