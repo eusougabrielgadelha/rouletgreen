@@ -348,7 +348,7 @@ class BlazeAutomation:
                         const numEl = entry.querySelector('.number');
                         if (numEl) {
                             const t = (numEl.innerText || numEl.textContent || '').trim();
-                            if (/^\d+$/.test(t)) number = parseInt(t);
+                            if (/^\\d+$/.test(t)) number = parseInt(t);
                         }
                         results.push({ color, number });
                     });
@@ -431,7 +431,7 @@ class BlazeAutomation:
                             const numEl = el.querySelector('.number');
                             if (numEl) {
                                 const t = (numEl.innerText || numEl.textContent || '').trim();
-                                if (/^\d+$/.test(t)) number = parseInt(t);
+                                if (/^\\d+$/.test(t)) number = parseInt(t);
                             }
                         }
                         if (color) return { color, number };
