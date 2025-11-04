@@ -323,8 +323,10 @@ class BlazeAutomation:
             print(f"[AVISO] Erro ao navegar para Double: {e}")
             return False
     
-    def get_recent_results(self, limit: int = 24, check_changes: bool = False) -> list:
-        """Obtém resultados recentes"""
+    def get_recent_results(self, limit: int = 24, check_changes: bool = False, newest_first: bool = True) -> list:
+        """Obtém resultados recentes.
+        newest_first=True retorna o mais recente no índice 0.
+        """
         try:
             # Verifica cache
             if check_changes and time.time() - self._results_cache['timestamp'] < self._results_cache['cache_duration']:
@@ -356,12 +358,14 @@ class BlazeAutomation:
                 }
             """)
             
+            # Ajusta ordem conforme parâmetro
+            sliced = results_js[:limit]
+            if not newest_first:
+                sliced = list(reversed(sliced))
+
             # Converte para formato esperado
-            for item in results_js[:limit]:
-                results.append({
-                    'color': item.get('color'),
-                    'number': item.get('number'),
-                })
+            for item in sliced:
+                results.append({'color': item.get('color'), 'number': item.get('number')})
             
             # Atualiza cache
             self._results_cache = {
