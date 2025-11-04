@@ -11,8 +11,8 @@ BLAZE_URL = "https://blaze.bet.br/pt/"
 DOUBLE_URL = "https://blaze.bet.br/pt/games/double"
 
 # Credenciais (configure exclusivamente via variáveis de ambiente)
-EMAIL = os.getenv("BLAZE_EMAIL", "gabrielgadelham@gmail.com")
-PASSWORD = os.getenv("BLAZE_PASSWORD", "inDubai2023*")
+EMAIL = os.getenv("BLAZE_EMAIL", "")
+PASSWORD = os.getenv("BLAZE_PASSWORD", "")
 
 # Configurações do navegador
 # Detecta automaticamente se está em servidor (sem display)
@@ -62,9 +62,9 @@ DATABASE_PATH = "blaze_data.db"
 
 # Telegram Bot (opcional)
 # Habilita automaticamente apenas se houver token e chat id válidos
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8487738643:AAHfnEEB6PKN6rDlRKrKkrh6HGRyTYtrge0")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "-1003285838290")
-TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "570272217")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "")
 TELEGRAM_ENABLED = (
     os.getenv("TELEGRAM_ENABLED", "auto").lower() == "true"
     or (
