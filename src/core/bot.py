@@ -58,6 +58,7 @@ class BlazeBot:
         
         # Controle de aposta atual
         self.current_bet_game_id = None
+        self.recovery_cooldown_until = 0
     
     def initialize(self, skip_login_on_failure: bool = True):
         """Inicializa o bot
@@ -141,6 +142,8 @@ class BlazeBot:
         if self.automation.navigate_to_double():
             self.ui.print_success("Jogo Double carregado e pronto")
             # O delay de 10 segundos já está incluído no método navigate_to_double
+            # Define cooldown para evitar falso positivo de não responsividade logo após navegação
+            self.recovery_cooldown_until = time.time() + 15
             
             return True
         else:
@@ -416,7 +419,7 @@ class BlazeBot:
                         
                         unresponsive = not self.automation.is_chrome_responsive(timeout=5.0)
                         inactive = (current_time - getattr(self.automation, 'last_activity_time', current_time)) > MAX_INACTIVITY_TIME
-                        if unresponsive or inactive:
+                        if (unresponsive or inactive) and current_time >= getattr(self, 'recovery_cooldown_until', 0):
                             self.ui.print_warning("Chrome não está respondendo - tentando recuperar...")
                             
                             if not config.AUTO_RECOVERY_ENABLED:
