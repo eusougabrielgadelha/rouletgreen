@@ -59,6 +59,8 @@ class BlazeAutomation:
         self.last_antibot_detected = False
         # Humanização
         self.last_human_action_time = 0.0
+        # Anti-bot strikes
+        self.antibot_strikes = 0
         
         # Cache de resultados para performance
         self._results_cache = {
@@ -676,6 +678,15 @@ class BlazeAutomation:
                 }
             """)
             self.last_antibot_detected = bool(detected)
+            # Atualiza strikes
+            try:
+                if self.last_antibot_detected:
+                    self.antibot_strikes = min(10, self.antibot_strikes + 1)
+                else:
+                    # decaimento lento
+                    self.antibot_strikes = max(0, self.antibot_strikes - 1)
+            except Exception:
+                pass
             return self.last_antibot_detected
         except Exception:
             return False
@@ -900,6 +911,11 @@ class BlazeAutomation:
     def reinitialize_with_login_retry(self, email: str = None, password: str = None, max_retries: int = 2) -> bool:
         """Reinicializa e tenta login novamente"""
         try:
+            # Se muitos strikes anti-bot, tenta hard recover diretamente
+            if self.antibot_strikes >= 2:
+                if self.hard_recover(email=email, password=password):
+                    return True
+                # fallback: tenta suave mesmo assim
             # Evita recriar Playwright; tenta recuperação suave primeiro
             if self.soft_recover(navigate=True):
                 self._goto_with_retry(config.BLAZE_URL, attempts=3)
@@ -914,6 +930,29 @@ class BlazeAutomation:
                 return True
             return False
         except:
+            return False
+
+    def hard_recover(self, email: str = None, password: str = None) -> bool:
+        """Recuperação completa: fecha tudo e reinicia Playwright com randomização nova."""
+        try:
+            print("[INFO] Iniciando recuperação completa do navegador...")
+            self.close()
+            time.sleep(2)
+            self.init_driver()
+            # Navega fluxo padrão
+            self._goto_with_retry(config.BLAZE_URL, attempts=2)
+            time.sleep(2)
+            self.accept_cookies()
+            self.confirm_age()
+            if email and password:
+                self.login(email, password)
+            self.navigate_to_double()
+            # Reseta strikes parcialmente
+            self.antibot_strikes = max(0, self.antibot_strikes - 2)
+            print("[SUCCESS] Recuperação completa concluída")
+            return True
+        except Exception as e:
+            print(f"[ERRO] Falha na recuperação completa: {e}")
             return False
 
     # ===== Utilitários internos =====

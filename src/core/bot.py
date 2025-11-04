@@ -448,13 +448,23 @@ class BlazeBot:
                                     # ainda em backoff
                                     pass
                                 else:
-                                    # Recuperação suave (não recria Playwright)
-                                    self.ui.print_info("Tentando recuperação suave do navegador...")
-                                    if self.automation.reinitialize_with_login_retry(
+                                    # Tenta recuperação suave, senão completa quando anti-bot persistir
+                                    self.ui.print_info("Tentando recuperação do navegador...")
+                                    ok = self.automation.reinitialize_with_login_retry(
                                         email=config.EMAIL if config.EMAIL and config.PASSWORD else None,
                                         password=config.PASSWORD if config.EMAIL and config.PASSWORD else None,
                                         max_retries=1
-                                    ):
+                                    )
+                                    if not ok and getattr(self.automation, 'antibot_strikes', 0) >= 2:
+                                        self.ui.print_warning("Anti-bot persistente. Tentando recuperação COMPLETA...")
+                                        ok = self.automation.hard_recover(
+                                            email=config.EMAIL if config.EMAIL and config.PASSWORD else None,
+                                            password=config.PASSWORD if config.EMAIL and config.PASSWORD else None,
+                                        )
+                                        if ok:
+                                            # cooldown maior para não martelar challenge
+                                            self.recovery_cooldown_until = time.time() + 60
+                                    if ok:
                                         self.ui.print_success("Navegador recuperado com sucesso")
                                         recovery_attempts = 0
                                         next_recovery_allowed_at = 0
@@ -462,9 +472,11 @@ class BlazeBot:
                                             self.analyzer_thread = threading.Thread(target=self.analyzer_loop, daemon=True)
                                             self.analyzer_thread.start()
                                     else:
-                                        self.ui.print_error("Falha na recuperação suave. Ignorando reinicialização completa para evitar conflito com asyncio.")
+                                        self.ui.print_error("Falha na recuperação. Aplicando backoff...")
                                         recovery_attempts += 1
-                                        backoff = min(60.0, config.RECOVERY_BACKOFF_BASE * recovery_attempts)
+                                        # Backoff cresce mais quando anti-bot está alto
+                                        extra = 10 if getattr(self.automation, 'antibot_strikes', 0) >= 2 else 0
+                                        backoff = min(120.0, config.RECOVERY_BACKOFF_BASE * recovery_attempts + extra)
                                         next_recovery_allowed_at = current_time + backoff
                                         time.sleep(1)
                                         continue
