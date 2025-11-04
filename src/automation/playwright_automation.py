@@ -588,8 +588,149 @@ class BlazeAutomation:
             print(f"[AVISO] Erro ao navegar para Double: {e}")
             return False
     
+    def _get_recent_results_from_api(self) -> list:
+        """Obtém resultados recentes via API XHR (mais eficiente e menos detectável).
+        Retorna lista vazia se falhar (fallback para DOM).
+        """
+        try:
+            if not self.page:
+                return []
+            
+            # Captura headers dinâmicos da página (se disponíveis)
+            # Tenta extrair de window.__APP_CONFIG__ ou interceptar de requisições anteriores
+            try:
+                headers_data = self.page.evaluate("""
+                    () => {
+                        // Tenta obter de várias fontes possíveis
+                        let x_client_version = 'b17dbb1d7';  // fallback
+                        let x_session_id = 'null';  // fallback
+                        
+                        // Tenta window.__APP_CONFIG__ ou similar
+                        if (window.__APP_CONFIG__ && window.__APP_CONFIG__.clientVersion) {
+                            x_client_version = window.__APP_CONFIG__.clientVersion;
+                        }
+                        if (window.__APP_CONFIG__ && window.__APP_CONFIG__.sessionId) {
+                            x_session_id = window.__APP_CONFIG__.sessionId;
+                        }
+                        
+                        // Tenta localStorage
+                        try {
+                            const stored = localStorage.getItem('__blaze_config__');
+                            if (stored) {
+                                const parsed = JSON.parse(stored);
+                                if (parsed.clientVersion) x_client_version = parsed.clientVersion;
+                                if (parsed.sessionId) x_session_id = parsed.sessionId;
+                            }
+                        } catch(e) {}
+                        
+                        // Tenta window.__CLIENT_VERSION__ / __SESSION_ID__ direto
+                        if (window.__CLIENT_VERSION__) x_client_version = window.__CLIENT_VERSION__;
+                        if (window.__SESSION_ID__) x_session_id = window.__SESSION_ID__;
+                        
+                        return {
+                            x_client_version: x_client_version,
+                            x_session_id: x_session_id
+                        };
+                    }
+                """)
+                x_client_version = headers_data.get('x_client_version', 'b17dbb1d7')
+                x_session_id = headers_data.get('x_session_id', 'null')
+            except Exception:
+                # Fallback para valores padrão se não conseguir extrair
+                x_client_version = 'b17dbb1d7'
+                x_session_id = 'null'
+            
+            # Obtém user-agent atual do contexto
+            user_agent = self.context.user_agent if self.context else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+            
+            # Obtém sec-ch-ua dinamicamente baseado no user-agent
+            if 'Chrome/142' in user_agent or 'Chrome/131' in user_agent:
+                sec_ch_ua = '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"'
+            elif 'Chrome/130' in user_agent:
+                sec_ch_ua = '"Chromium";v="130", "Google Chrome";v="130", "Not_A Brand";v="99"'
+            else:
+                sec_ch_ua = '"Chromium";v="129", "Google Chrome";v="129", "Not_A Brand";v="99"'
+            
+            # Faz requisição HTTP direta via Playwright API
+            response = self.page.request.get(
+                'https://blaze.bet.br/api/singleplayer-originals/originals/roulette_games/recent/1',
+                headers={
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'authorization': 'Bearer null',
+                    'priority': 'u=1, i',
+                    'referer': 'https://blaze.bet.br/pt/games/double',
+                    'sec-ch-ua': sec_ch_ua,
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': user_agent,
+                    'x-client-version': x_client_version,
+                    'x-session-id': x_session_id
+                }
+            )
+            
+            if response.status != 200:
+                print(f"[AVISO] API retornou status {response.status} - usando fallback DOM")
+                return []
+            
+            # Parse do JSON
+            data = response.json()
+            if not isinstance(data, list):
+                print(f"[AVISO] API retornou formato inesperado: {type(data)}")
+                return []
+            
+            if len(data) == 0:
+                print("[AVISO] API retornou lista vazia - usando fallback DOM")
+                return []
+            
+            # Converte formato da API (color: 0=white, 1=red, 2=black) para nosso formato
+            results = []
+            for item in data:
+                api_color = item.get('color')
+                api_roll = item.get('roll')
+                
+                # Mapeia color da API para nossa cor
+                if api_color == 0:
+                    color = 'white'
+                elif api_color == 1:
+                    color = 'red'
+                elif api_color == 2:
+                    color = 'black'
+                else:
+                    continue  # Ignora cores inválidas
+                
+                # Normaliza resultado
+                normalized = normalize_result({
+                    'color': color,
+                    'number': api_roll
+                })
+                results.append(normalized)
+            
+            # Log de sucesso (apenas na primeira vez ou a cada 10 chamadas para não poluir)
+            if not hasattr(self, '_api_success_count'):
+                self._api_success_count = 0
+            self._api_success_count += 1
+            if self._api_success_count == 1 or self._api_success_count % 10 == 0:
+                print(f"[INFO] ✅ Resultados obtidos via API XHR ({len(results)} resultados)")
+            
+            # Atualiza indicador de atividade
+            self.last_activity_time = time.time()
+            return results
+            
+        except Exception as e:
+            print(f"[AVISO] Erro ao obter resultados via API: {e}")
+            import traceback
+            if not hasattr(self, '_api_success_count') or self._api_success_count == 0:
+                # Só mostra traceback na primeira falha
+                traceback.print_exc()
+            return []  # Retorna vazio para usar fallback DOM
+    
     def get_recent_results(self, limit: int = 24, check_changes: bool = False, newest_first: bool = True) -> list:
         """Obtém resultados recentes.
+        Tenta primeiro via API XHR (mais eficiente), depois fallback para DOM.
         newest_first=True retorna o mais recente no índice 0.
         """
         try:
@@ -604,38 +745,46 @@ class BlazeAutomation:
             
             results = []
             
-            # Extrai resultados da seção "Giros Anteriores"
-            results_js = self.page.evaluate("""
-                () => {
-                    const results = [];
-                    const entries = document.querySelectorAll('#roulette-recent .roulette-previous .entry .sm-box');
-                    entries.forEach(entry => {
-                        const classes = entry.className || '';
-                        let color = null;
-                        if (classes.includes('red')) color = 'red';
-                        else if (classes.includes('black')) color = 'black';
-                        else if (classes.includes('white')) color = 'white';
-                        if (!color) return;
-                        let number = null;
-                        const numEl = entry.querySelector('.number');
-                        if (numEl) {
-                            const t = (numEl.innerText || numEl.textContent || '').trim();
-                            if (/^\\d+$/.test(t)) number = parseInt(t);
-                        }
-                        results.push({ color, number });
-                    });
-                    return results.slice(0, 24);
-                }
-            """)
-            
-            # Ajusta ordem conforme parâmetro
-            sliced = results_js[:limit]
-            if not newest_first:
-                sliced = list(reversed(sliced))
+            # TENTA PRIMEIRO VIA API (mais eficiente e menos detectável)
+            api_results = self._get_recent_results_from_api()
+            if api_results:
+                # API retorna com mais recente primeiro (created_at desc)
+                results = api_results[:limit]
+                if not newest_first:
+                    results = list(reversed(results))
+            else:
+                # FALLBACK: Extrai resultados da seção "Giros Anteriores" (DOM)
+                results_js = self.page.evaluate("""
+                    () => {
+                        const results = [];
+                        const entries = document.querySelectorAll('#roulette-recent .roulette-previous .entry .sm-box');
+                        entries.forEach(entry => {
+                            const classes = entry.className || '';
+                            let color = null;
+                            if (classes.includes('red')) color = 'red';
+                            else if (classes.includes('black')) color = 'black';
+                            else if (classes.includes('white')) color = 'white';
+                            if (!color) return;
+                            let number = null;
+                            const numEl = entry.querySelector('.number');
+                            if (numEl) {
+                                const t = (numEl.innerText || numEl.textContent || '').trim();
+                                if (/^\\d+$/.test(t)) number = parseInt(t);
+                            }
+                            results.push({ color, number });
+                        });
+                        return results.slice(0, 24);
+                    }
+                """)
+                
+                # Ajusta ordem conforme parâmetro
+                sliced = results_js[:limit]
+                if not newest_first:
+                    sliced = list(reversed(sliced))
 
-            # Converte e normaliza (white => number=0; corrige inconsistências)
-            for item in sliced:
-                results.append(normalize_result({'color': item.get('color'), 'number': item.get('number')}))
+                # Converte e normaliza (white => number=0; corrige inconsistências)
+                for item in sliced:
+                    results.append(normalize_result({'color': item.get('color'), 'number': item.get('number')}))
             
             # Atualiza cache
             # Ajusta cache conforme cooldown
