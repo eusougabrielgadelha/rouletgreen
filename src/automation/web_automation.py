@@ -55,7 +55,7 @@ class BlazeAutomation:
     def init_driver(self):
         """Inicializa o driver do Chrome com técnicas avançadas de bypass do Cloudflare"""
         try:
-            # Detecta qual navegador está disponível
+            # Detecta qual navegador está disponível e verifica se é executável
             chrome_binary = None
             chrome_paths = [
                 '/usr/bin/google-chrome-stable',
@@ -65,17 +65,21 @@ class BlazeAutomation:
                 '/snap/bin/chromium',
             ]
             
+            # Primeiro verifica se os caminhos diretos existem e são executáveis
             for path in chrome_paths:
-                try:
-                    import subprocess
-                    result = subprocess.run(['which', path.split('/')[-1]], 
-                                          capture_output=True, text=True, timeout=2)
-                    if result.returncode == 0:
-                        chrome_binary = result.stdout.strip()
-                        print(f"[INFO] Navegador encontrado: {chrome_binary}")
-                        break
-                except:
-                    continue
+                if os.path.exists(path) and os.access(path, os.X_OK):
+                    chrome_binary = path
+                    print(f"[INFO] Navegador encontrado: {chrome_binary}")
+                    # Verifica versão
+                    try:
+                        import subprocess
+                        version_result = subprocess.run([path, '--version'], 
+                                                      capture_output=True, text=True, timeout=5)
+                        if version_result.returncode == 0:
+                            print(f"[INFO] Versão: {version_result.stdout.strip()}")
+                    except:
+                        pass
+                    break
             
             # Se não encontrou, tenta detectar via which
             if not chrome_binary:
@@ -85,11 +89,19 @@ class BlazeAutomation:
                         result = subprocess.run(['which', cmd], 
                                               capture_output=True, text=True, timeout=2)
                         if result.returncode == 0:
-                            chrome_binary = result.stdout.strip()
-                            print(f"[INFO] Navegador encontrado via which: {chrome_binary}")
-                            break
+                            found_path = result.stdout.strip()
+                            # Verifica se o arquivo existe e é executável
+                            if os.path.exists(found_path) and os.access(found_path, os.X_OK):
+                                chrome_binary = found_path
+                                print(f"[INFO] Navegador encontrado via which: {chrome_binary}")
+                                break
                 except:
                     pass
+            
+            # Se ainda não encontrou, avisa
+            if not chrome_binary:
+                print("[AVISO] Chrome/Chromium não encontrado nos caminhos padrão")
+                print("[INFO] Tente instalar: sudo apt install chromium-browser -y")
             
             # Prioriza usar undetected-chromedriver se disponível (melhor para bypass)
             if UC_AVAILABLE:
@@ -151,13 +163,26 @@ class BlazeAutomation:
             print("[INFO] Usando método padrão do Selenium com técnicas de stealth...")
             chrome_options = Options()
             
-            # Especifica o binário do Chrome se encontrado
-            if chrome_binary:
+            # Especifica o binário do Chrome se encontrado e válido
+            if chrome_binary and os.path.exists(chrome_binary) and os.access(chrome_binary, os.X_OK):
                 chrome_options.binary_location = chrome_binary
                 print(f"[INFO] Usando Chrome em: {chrome_binary}")
             else:
-                print("[AVISO] Chrome não encontrado nos caminhos padrão")
-                print("[INFO] Tentando continuar sem especificar binário...")
+                if chrome_binary:
+                    print(f"[AVISO] Chrome encontrado mas não é executável: {chrome_binary}")
+                    print("[INFO] Tentando corrigir permissões...")
+                    try:
+                        os.chmod(chrome_binary, 0o755)
+                        if os.access(chrome_binary, os.X_OK):
+                            chrome_options.binary_location = chrome_binary
+                            print(f"[SUCCESS] Permissões corrigidas, usando: {chrome_binary}")
+                        else:
+                            print("[AVISO] Não foi possível corrigir permissões")
+                    except Exception as e:
+                        print(f"[AVISO] Erro ao corrigir permissões: {e}")
+                else:
+                    print("[AVISO] Chrome não encontrado nos caminhos padrão")
+                    print("[INFO] Tentando continuar sem especificar binário...")
             
             if self.headless:
                 chrome_options.add_argument("--headless=new")
@@ -230,24 +255,45 @@ class BlazeAutomation:
                 driver_path = ChromeDriverManager().install()
                 
                 # Verifica se o caminho aponta para o executável correto
-                if not driver_path.endswith('.exe') and not driver_path.endswith('chromedriver'):
-                    from pathlib import Path
-                    driver_dir = Path(driver_path).parent
-                    possible_names = ['chromedriver.exe', 'chromedriver', 'chromedriver-win64.exe', 'chromedriver-win32.exe']
+                # Em Linux, o chromedriver não tem extensão .exe
+                from pathlib import Path
+                driver_path_obj = Path(driver_path)
+                
+                # Se o caminho retornado não é um executável, procura pelo executável
+                if not driver_path_obj.is_file() or not os.access(driver_path, os.X_OK):
+                    driver_dir = driver_path_obj.parent
+                    
+                    # Procura pelo executável chromedriver (Linux)
+                    possible_names = ['chromedriver', 'chromedriver.exe', 'chromedriver-linux64', 'chromedriver-win64.exe']
+                    
+                    # Primeiro procura no diretório retornado
                     for name in possible_names:
                         exe_path = driver_dir / name
-                        if exe_path.exists():
+                        if exe_path.exists() and os.access(str(exe_path), os.X_OK):
                             driver_path = str(exe_path)
                             break
-                    else:
+                    
+                    # Se não encontrou, procura recursivamente
+                    if not driver_path_obj.is_file() or not os.access(driver_path, os.X_OK):
                         for root, dirs, files in os.walk(driver_dir):
                             for file in files:
-                                if file.startswith('chromedriver') and (file.endswith('.exe') or file == 'chromedriver'):
-                                    driver_path = os.path.join(root, file)
-                                    break
+                                if file == 'chromedriver' or (file.startswith('chromedriver') and file.endswith('.exe')):
+                                    full_path = os.path.join(root, file)
+                                    if os.access(full_path, os.X_OK):
+                                        driver_path = full_path
+                                        break
+                            if driver_path_obj.is_file() and os.access(driver_path, os.X_OK):
+                                break
                 
-                service = Service(driver_path)
-                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                # Garante que o arquivo é executável
+                if driver_path and os.path.exists(driver_path):
+                    os.chmod(driver_path, 0o755)  # Torna executável
+                
+                if driver_path and os.path.exists(driver_path) and os.access(driver_path, os.X_OK):
+                    service = Service(driver_path)
+                    self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                else:
+                    raise Exception(f"ChromeDriver não encontrado ou não executável: {driver_path}")
             except Exception as e:
                 print(f"Aviso: Erro ao usar ChromeDriverManager: {e}")
                 print("Tentando usar ChromeDriver do sistema...")

@@ -544,6 +544,25 @@ sudo apt install -y \
     libgconf-2-4
 ```
 
+#### Limpar cache do webdriver-manager (corrige erro de ChromeDriver)
+```bash
+# Limpar cache corrompido
+rm -rf ~/.wdm
+rm -rf ~/.cache/selenium
+
+# Reinstalar webdriver-manager
+source venv/bin/activate
+pip install --upgrade webdriver-manager
+```
+
+#### Usar script de correção automática
+```bash
+# Baixar script de correção
+cd /home/rouletgreen
+chmod +x scripts/fix_chromedriver_linux.sh
+./scripts/fix_chromedriver_linux.sh
+```
+
 #### Se ainda não funcionar, verificar logs detalhados
 ```bash
 # Ver logs do PM2
