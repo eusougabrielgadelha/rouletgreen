@@ -68,18 +68,30 @@ class BlazeAutomation:
             # Primeiro verifica se os caminhos diretos existem e são executáveis
             for path in chrome_paths:
                 if os.path.exists(path) and os.access(path, os.X_OK):
-                    chrome_binary = path
-                    print(f"[INFO] Navegador encontrado: {chrome_binary}")
-                    # Verifica versão
+                    # Tenta executar para verificar se realmente funciona
                     try:
                         import subprocess
-                        version_result = subprocess.run([path, '--version'], 
-                                                      capture_output=True, text=True, timeout=5)
-                        if version_result.returncode == 0:
-                            print(f"[INFO] Versão: {version_result.stdout.strip()}")
-                    except:
-                        pass
-                    break
+                        # Testa se consegue executar o Chrome
+                        test_result = subprocess.run(
+                            [path, '--headless', '--disable-gpu', '--no-sandbox', '--version'],
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                            stderr=subprocess.DEVNULL
+                        )
+                        if test_result.returncode == 0:
+                            chrome_binary = path
+                            print(f"[INFO] Navegador encontrado e testado: {chrome_binary}")
+                            print(f"[INFO] Versão: {test_result.stdout.strip()}")
+                            break
+                        else:
+                            print(f"[AVISO] Chrome encontrado em {path} mas não conseguiu executar")
+                    except Exception as e:
+                        print(f"[AVISO] Erro ao testar Chrome em {path}: {e}")
+                        # Ainda assim, tenta usar se o arquivo existe
+                        chrome_binary = path
+                        print(f"[INFO] Navegador encontrado (não testado): {chrome_binary}")
+                        break
             
             # Se não encontrou, tenta detectar via which
             if not chrome_binary:
@@ -92,9 +104,26 @@ class BlazeAutomation:
                             found_path = result.stdout.strip()
                             # Verifica se o arquivo existe e é executável
                             if os.path.exists(found_path) and os.access(found_path, os.X_OK):
-                                chrome_binary = found_path
-                                print(f"[INFO] Navegador encontrado via which: {chrome_binary}")
-                                break
+                                # Testa se funciona
+                                try:
+                                    test_result = subprocess.run(
+                                        [found_path, '--headless', '--disable-gpu', '--no-sandbox', '--version'],
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=10,
+                                        stderr=subprocess.DEVNULL
+                                    )
+                                    if test_result.returncode == 0:
+                                        chrome_binary = found_path
+                                        print(f"[INFO] Navegador encontrado via which e testado: {chrome_binary}")
+                                        break
+                                    else:
+                                        print(f"[AVISO] Chrome encontrado via which mas não executou: {found_path}")
+                                except:
+                                    # Se não conseguiu testar, usa mesmo assim
+                                    chrome_binary = found_path
+                                    print(f"[INFO] Navegador encontrado via which (não testado): {chrome_binary}")
+                                    break
                 except:
                     pass
             
@@ -102,6 +131,7 @@ class BlazeAutomation:
             if not chrome_binary:
                 print("[AVISO] Chrome/Chromium não encontrado nos caminhos padrão")
                 print("[INFO] Tente instalar: sudo apt install chromium-browser -y")
+                print("[INFO] Ou instalar dependências: sudo apt install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libxshmfence1 libxss1 libgconf-2-4 libpangocairo-1.0-0 libatk1.0-0 libcairo-gobject2 libgtk-3-0 libgdk-pixbuf2.0-0")
             
             # Prioriza usar undetected-chromedriver se disponível (melhor para bypass)
             if UC_AVAILABLE:
