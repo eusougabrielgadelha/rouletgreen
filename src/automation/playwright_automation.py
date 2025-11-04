@@ -7,8 +7,16 @@ import re
 import random
 import sys
 import os
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import Page, Browser, BrowserContext
+import threading
+
+# Importa Playwright de forma segura
+try:
+    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import Page, Browser, BrowserContext
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    print("[AVISO] Playwright não está instalado")
 
 # Adiciona o diretório raiz ao path para importar config
 root_dir = os.path.join(os.path.dirname(__file__), '..', '..')
@@ -20,6 +28,12 @@ class BlazeAutomation:
     """Classe de automação usando Playwright - mais estável em servidor headless"""
     
     def __init__(self, headless: bool = False):
+        # Força headless em servidor sem display
+        import os
+        if not headless and (not os.getenv('DISPLAY') or os.getenv('DISPLAY') == ''):
+            print("[INFO] Servidor sem display - usando headless=True")
+            headless = True
+        
         self.playwright = None
         self.browser: Browser = None
         self.context: BrowserContext = None
@@ -47,8 +61,55 @@ class BlazeAutomation:
     def init_driver(self):
         """Inicializa o navegador Playwright"""
         try:
+            # Verifica se há loop asyncio rodando (incompatível com sync API)
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    print("[AVISO] Loop asyncio detectado - usando headless forçado e aguardando loop")
+                    # Força headless em servidor
+                    self.headless = True
+            except RuntimeError:
+                # Não há loop rodando, OK
+                pass
+            
+            # Força headless em servidor (sem DISPLAY)
+            if not self.headless:
+                import os
+                if not os.getenv('DISPLAY') or os.getenv('DISPLAY') == '':
+                    print("[INFO] Servidor sem display detectado - forçando headless=True")
+                    self.headless = True
+            
             print("[INFO] Inicializando Playwright...")
-            self.playwright = sync_playwright().start()
+            
+            # Inicia Playwright de forma segura
+            try:
+                self.playwright = sync_playwright().start()
+            except Exception as e:
+                if "asyncio" in str(e).lower():
+                    print("[AVISO] Conflito com asyncio detectado - tentando alternativa...")
+                    # Tenta criar nova thread para Playwright
+                    import threading
+                    playwright_result = {'success': False, 'playwright': None, 'error': None}
+                    
+                    def init_playwright_thread():
+                        try:
+                            playwright_result['playwright'] = sync_playwright().start()
+                            playwright_result['success'] = True
+                        except Exception as thread_error:
+                            playwright_result['error'] = thread_error
+                    
+                    thread = threading.Thread(target=init_playwright_thread)
+                    thread.daemon = True
+                    thread.start()
+                    thread.join(timeout=30)
+                    
+                    if playwright_result['success']:
+                        self.playwright = playwright_result['playwright']
+                    else:
+                        raise playwright_result['error'] if playwright_result['error'] else e
+                else:
+                    raise
             
             # Configurações do navegador
             browser_args = [
