@@ -11,8 +11,8 @@ BLAZE_URL = "https://blaze.bet.br/pt/"
 DOUBLE_URL = "https://blaze.bet.br/pt/games/double"
 
 # Credenciais (configure exclusivamente via variáveis de ambiente)
-EMAIL = os.getenv("BLAZE_EMAIL", "gabrielgadelham@gmail.com")
-PASSWORD = os.getenv("BLAZE_PASSWORD", "inDubai2023*")
+EMAIL = os.getenv("BLAZE_EMAIL", "")
+PASSWORD = os.getenv("BLAZE_PASSWORD", "")
 
 # Configurações do navegador
 # Detecta automaticamente se está em servidor (sem display)
@@ -44,6 +44,9 @@ SEQUENCE_COLLECTION_INTERVAL = 5  # Intervalo em segundos para coletar sequênci
 MONITOR_INTERVAL = 0.5  # Intervalo de monitoramento em segundos (durante apostas)
 ANALYZER_INTERVAL = 0.3  # Intervalo de análise em segundos
 UI_UPDATE_INTERVAL = 0.5  # Intervalo de atualização da UI em segundos
+
+# Recuperação automática (reinicializações). Se houver conflito com asyncio/Playwright, defina como false
+AUTO_RECOVERY_ENABLED = os.getenv('AUTO_RECOVERY_ENABLED', 'true').lower() == 'true'
 
 # Cores do jogo
 COLORS = {

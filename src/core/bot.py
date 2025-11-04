@@ -418,48 +418,26 @@ class BlazeBot:
                         last_chrome_check = current_time
                         
                         if not self.automation.is_chrome_responsive(timeout=5.0):
-                            self.ui.print_warning("Chrome não está respondendo - reiniciando...")
+                            self.ui.print_warning("Chrome não está respondendo - tentando recuperar...")
                             
-                            # Se estava logado, tenta fazer login novamente
-                            if self.automation.is_logged_in or self.automation.login_attempted:
-                                self.ui.print_info("Tentando reinicializar com login...")
+                            if not config.AUTO_RECOVERY_ENABLED:
+                                self.ui.print_warning("Recuperação automática desativada - mantendo sessão atual")
+                            else:
+                                # Recuperação suave (não recria Playwright)
+                                self.ui.print_info("Tentando recuperação suave do navegador...")
                                 if self.automation.reinitialize_with_login_retry(
                                     email=config.EMAIL if config.EMAIL and config.PASSWORD else None,
                                     password=config.PASSWORD if config.EMAIL and config.PASSWORD else None,
-                                    max_retries=2
+                                    max_retries=1
                                 ):
-                                    self.ui.print_success("Chrome reinicializado com sucesso")
-                                    # Reseta threads e continua
-                                    if not self.monitor_thread.is_alive():
-                                        self.monitor_thread = threading.Thread(target=self.monitor_game_loop, daemon=True)
-                                        self.monitor_thread.start()
+                                    self.ui.print_success("Navegador recuperado com sucesso")
                                     if not self.analyzer_thread.is_alive():
                                         self.analyzer_thread = threading.Thread(target=self.analyzer_loop, daemon=True)
                                         self.analyzer_thread.start()
                                 else:
-                                    self.ui.print_error("Falha ao reinicializar Chrome")
-                                    # Tenta reinicializar completamente
-                                    time.sleep(5)
-                                    if not self.initialize(skip_login_on_failure=True):
-                                        self.ui.print_error("Falha crítica - encerrando")
-                                        break
-                            else:
-                                # Não estava logado, apenas reinicia
-                                self.ui.print_info("Reiniciando Chrome sem login...")
-                                if self.automation.restart_chrome():
-                                    self.automation.driver.get(config.BLAZE_URL)
+                                    self.ui.print_error("Falha na recuperação suave. Ignorando reinicialização completa para evitar conflito com asyncio.")
+                                    # Não chama initialize()/restart para não recriar Playwright
                                     time.sleep(3)
-                                    self.automation.accept_cookies()
-                                    self.automation.confirm_age()
-                                    if self.automation.navigate_to_double():
-                                        self.ui.print_success("Chrome reinicializado")
-                                    else:
-                                        self.ui.print_error("Falha ao navegar para o jogo após reinicialização")
-                                        time.sleep(5)
-                                        continue
-                                else:
-                                    self.ui.print_error("Falha ao reiniciar Chrome")
-                                    time.sleep(5)
                                     continue
                         
                         # Verifica se ainda está logado (se tinha tentado fazer login)

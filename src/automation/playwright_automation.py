@@ -667,11 +667,54 @@ class BlazeAutomation:
             return True
         except:
             return False
+
+    def soft_recover(self, navigate: bool = True) -> bool:
+        """Tenta recuperar sem recriar Playwright (mesmo processo/contexto).
+        - Fecha e reabre apenas a página dentro do mesmo context
+        - Reatribui self.driver
+        - Opcionalmente navega até a URL principal e/ou Double
+        """
+        try:
+            if not self.browser:
+                return False
+            if not self.context:
+                # recria contexto sem parar playwright
+                self.context = self.browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    locale='pt-BR',
+                    timezone_id='America/Sao_Paulo',
+                    permissions=['notifications'],
+                    ignore_https_errors=True,
+                )
+            # fecha página antiga
+            try:
+                if self.page:
+                    self.page.close()
+            except:
+                pass
+            # abre nova página
+            self.page = self.context.new_page()
+            self.driver = self.page
+
+            if navigate:
+                try:
+                    self._goto_with_retry(config.BLAZE_URL, attempts=2)
+                    time.sleep(2)
+                    self.accept_cookies()
+                    self.confirm_age()
+                except Exception:
+                    pass
+
+            return True
+        except Exception:
+            return False
     
     def reinitialize_with_login_retry(self, email: str = None, password: str = None, max_retries: int = 2) -> bool:
         """Reinicializa e tenta login novamente"""
         try:
-            if self.restart_chrome():
+            # Evita recriar Playwright; tenta recuperação suave primeiro
+            if self.soft_recover(navigate=True):
                 self._goto_with_retry(config.BLAZE_URL, attempts=3)
                 time.sleep(3)
                 
