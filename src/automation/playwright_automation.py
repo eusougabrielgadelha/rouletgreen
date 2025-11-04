@@ -549,6 +549,39 @@ class BlazeAutomation:
             
         except:
             return False
+
+    def wait_for_recent_results_change(self, timeout: float = 30.0) -> bool:
+        """Aguarda uma mudança na lista de resultados recentes (entrada adicionada/movida).
+        Retorna True se detectar mudança antes do timeout, senão False.
+        """
+        try:
+            changed = self.page.evaluate(
+                """
+                (ms) => {
+                    return new Promise((resolve) => {
+                        const container = document.querySelector('#roulette-recent .roulette-previous .entries');
+                        if (!container) {
+                            setTimeout(() => resolve(false), ms);
+                            return;
+                        }
+                        const baseline = container.innerText || container.textContent || '';
+                        const observer = new MutationObserver(() => {
+                            const current = container.innerText || container.textContent || '';
+                            if (current !== baseline) {
+                                observer.disconnect();
+                                resolve(true);
+                            }
+                        });
+                        observer.observe(container, { childList: true, subtree: true, attributes: false, characterData: false });
+                        setTimeout(() => { observer.disconnect(); resolve(false); }, ms);
+                    });
+                }
+                """,
+                int(timeout * 1000)
+            )
+            return bool(changed)
+        except Exception:
+            return False
     
     def check_if_logged_in(self) -> bool:
         """Verifica se está logado"""

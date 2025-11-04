@@ -413,6 +413,10 @@ class BlazeBot:
                 try:
                     current_time = time.time()
                     
+                    # Espera um novo resultado via MutationObserver (sem polling pesado)
+                    # Isso sinaliza a transição de rodada: novo resultado chegou -> janela de apostas abre
+                    self.automation.wait_for_recent_results_change(timeout=20.0)
+
                     # Sistema de recuperação: verifica se Chrome está respondendo
                     if current_time - last_chrome_check >= CHROME_CHECK_INTERVAL:
                         last_chrome_check = current_time
@@ -464,13 +468,13 @@ class BlazeBot:
                                         self.ui.print_warning("Não foi possível restaurar login - continuando sem login")
                                         self.automation.is_logged_in = False
                     
-                    # Obtém estado atual do jogo diretamente (mesma thread do Playwright)
+                    # Obtém estado atual do jogo apenas após mudança relevante
                     game_state = None
                     try:
                         game_state = self.automation.get_current_game_state()
                     except Exception as e:
                         self.ui.print_warning(f"Erro ao obter estado do jogo: {e}")
-                        time.sleep(1)
+                        time.sleep(0.5)
                         continue
 
                     # Obtém resultados recentes diretamente e alimenta fila/DB (mesma thread do Playwright)
@@ -701,8 +705,8 @@ class BlazeBot:
                                     )
                                 opportunity_lost_sent = True
                     
-                    # Sleep muito curto para manter responsividade máxima
-                    time.sleep(0.05)  # 50ms para máxima responsividade
+                    # Sem polling agressivo: pequeno respiro
+                    time.sleep(0.02)
                     
                 except KeyboardInterrupt:
                     self.ui.print_warning("Interrompido pelo usuário")
