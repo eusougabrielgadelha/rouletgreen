@@ -32,9 +32,7 @@ class BlazeBot:
         self.db = Database(config.DATABASE_PATH)
         self.analyzer = PatternAnalyzer(self.db)
         self.ui = UI()
-        # IMPORTANTE: NÃO inicializar TelegramNotifier aqui se usar Playwright
-        # TelegramNotifier usa asyncio que conflita com Playwright sync API
-        # Será inicializado depois do Playwright
+        # Inicialização do Telegram é segura antes do Playwright (ajustada no notifier)
         self.telegram = None
         self.running = False
         self.last_game_id = None
@@ -69,6 +67,21 @@ class BlazeBot:
         """
         self.ui.print_header()
         self.ui.print_info("Inicializando sistema...")
+
+        # Inicializa o Telegram ANTES do Playwright
+        if self.telegram is None:
+            try:
+                self.telegram = TelegramNotifier()
+            except Exception as e:
+                self.ui.print_warning(f"Falha ao inicializar Telegram: {e}")
+                # Continua mesmo sem Telegram
+                class _DummyTelegram:
+                    enabled = False
+                    def __getattr__(self, _):
+                        def _noop(*args, **kwargs):
+                            return None
+                        return _noop
+                self.telegram = _DummyTelegram()
         
         # Inicializa automação web
         try:
@@ -126,20 +139,6 @@ class BlazeBot:
             self.ui.print_success("Jogo Double carregado e pronto")
             # O delay de 10 segundos já está incluído no método navigate_to_double
             
-            # Inicializa o Telegram SOMENTE após Playwright estar pronto
-            if self.telegram is None:
-                try:
-                    self.telegram = TelegramNotifier()
-                except Exception as e:
-                    self.ui.print_warning(f"Falha ao inicializar Telegram: {e}")
-                    # Continua mesmo sem Telegram
-                    class _DummyTelegram:
-                        enabled = False
-                        def __getattr__(self, _):
-                            def _noop(*args, **kwargs):
-                                return None
-                            return _noop
-                    self.telegram = _DummyTelegram()
             return True
         else:
             self.ui.print_error("Falha ao carregar jogo Double")
