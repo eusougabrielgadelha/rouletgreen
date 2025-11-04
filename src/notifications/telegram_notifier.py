@@ -50,7 +50,6 @@ class TelegramNotifier:
         if self.enabled:
             try:
                 print(f"[INFO] Inicializando Telegram Bot...")
-                print(f"[INFO] Token: {config.TELEGRAM_TOKEN[:20]}...")
                 print(f"[INFO] Chat ID: {config.TELEGRAM_CHAT_ID}")
                 
                 self.bot = Bot(token=config.TELEGRAM_TOKEN)

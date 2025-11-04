@@ -12,6 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.utils.encoding import setup_encoding
 setup_encoding()
 
+# Não força o mecanismo de automação aqui; deixe `src.automation` decidir via `USE_PLAYWRIGHT`
+# Caso precise forçar Playwright ou Selenium, defina a variável de ambiente externamente.
+
 # Importa a classe principal do bot
 from src.core import BlazeBot
 

@@ -167,9 +167,9 @@ class BlazeAutomation:
             # Compatibilidade: driver aponta para page, mas adiciona método get() para compatibilidade
             self.driver = self.page
             
-            # Adiciona método get() para compatibilidade com Selenium
+            # Adiciona método get() para compatibilidade com Selenium (com retry e domcontentloaded)
             def selenium_get(url):
-                return self.page.goto(url, wait_until='networkidle', timeout=60000)
+                return self._goto_with_retry(url, attempts=3)
             
             self.driver.get = selenium_get
             
@@ -278,8 +278,11 @@ class BlazeAutomation:
                 try:
                     email_input = self.page.wait_for_selector(selector, timeout=3000)
                     if email_input:
-                        # Digita caracter por caracter (simula humano)
-                        email_input.clear()
+                        # Limpa e digita caracter por caracter (simula humano)
+                        try:
+                            email_input.fill('')
+                        except Exception:
+                            pass
                         for char in email:
                             email_input.type(char, delay=random.randint(50, 150))
                         break
@@ -299,7 +302,10 @@ class BlazeAutomation:
                 try:
                     password_input = self.page.wait_for_selector(selector, timeout=3000)
                     if password_input:
-                        password_input.clear()
+                        try:
+                            password_input.fill('')
+                        except Exception:
+                            pass
                         for char in password:
                             password_input.type(char, delay=random.randint(50, 150))
                         break
@@ -356,8 +362,8 @@ class BlazeAutomation:
     def navigate_to_double(self) -> bool:
         """Navega para o jogo Double"""
         try:
-            self.page.goto(config.DOUBLE_URL, wait_until='networkidle', timeout=60000)
-            time.sleep(10)  # Aguarda página carregar completamente
+            self._goto_with_retry(config.DOUBLE_URL, attempts=3)
+            time.sleep(5)  # Aguarda alguns segundos para estabilizar
             return True
         except Exception as e:
             print(f"[AVISO] Erro ao navegar para Double: {e}")
@@ -538,7 +544,33 @@ class BlazeAutomation:
                     continue
             
             # Define valor
-            # TODO: Implementar seletor de valor
+            amount_selectors = [
+                'input[type="number"]',
+                'input[name*="amount"]',
+                'input[placeholder*="R$"]',
+                'input[placeholder*="valor"]',
+                'input[placeholder*="aposta"]',
+                'input[class*="amount"]',
+            ]
+            amount_str = str(amount)
+            for selector in amount_selectors:
+                try:
+                    amt = self.page.wait_for_selector(selector, timeout=1500)
+                    if amt:
+                        try:
+                            amt.fill('')
+                        except Exception:
+                            # fallback: selecionar tudo e digitar
+                            amt.click()
+                            self.page.keyboard.press('Control+A')
+                            self.page.keyboard.press('Backspace')
+                        # digita valor lentamente para evitar bloqueios
+                        for ch in amount_str:
+                            amt.type(ch, delay=random.randint(30, 90))
+                        time.sleep(0.2)
+                        break
+                except:
+                    continue
             
             # Confirma aposta
             confirm_selectors = [
@@ -640,7 +672,7 @@ class BlazeAutomation:
         """Reinicializa e tenta login novamente"""
         try:
             if self.restart_chrome():
-                self.page.goto(config.BLAZE_URL, wait_until='networkidle', timeout=60000)
+                self._goto_with_retry(config.BLAZE_URL, attempts=3)
                 time.sleep(3)
                 
                 self.accept_cookies()
@@ -653,6 +685,22 @@ class BlazeAutomation:
             return False
         except:
             return False
+
+    # ===== Utilitários internos =====
+    def _goto_with_retry(self, url: str, attempts: int = 3, base_timeout_ms: int = 60000):
+        """Abre URL com backoff e espera menos agressiva (domcontentloaded)."""
+        last_error = None
+        for i in range(1, attempts + 1):
+            try:
+                wait_until = 'domcontentloaded'
+                timeout_ms = base_timeout_ms + (i - 1) * 15000  # aumenta 15s por tentativa
+                return self.page.goto(url, wait_until=wait_until, timeout=timeout_ms)
+            except Exception as e:
+                last_error = e
+                print(f"[AVISO] goto falhou (tentativa {i}/{attempts}): {e}")
+                time.sleep(min(5 * i, 15))
+        if last_error:
+            raise last_error
     
     def close(self):
         """Fecha o navegador"""

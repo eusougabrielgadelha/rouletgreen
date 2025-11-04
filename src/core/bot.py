@@ -57,6 +57,9 @@ class BlazeBot:
         # Threads
         self.monitor_thread = None
         self.analyzer_thread = None
+        
+        # Controle de aposta atual
+        self.current_bet_game_id = None
     
     def initialize(self, skip_login_on_failure: bool = True):
         """Inicializa o bot
@@ -122,6 +125,21 @@ class BlazeBot:
         if self.automation.navigate_to_double():
             self.ui.print_success("Jogo Double carregado e pronto")
             # O delay de 10 segundos já está incluído no método navigate_to_double
+            
+            # Inicializa o Telegram SOMENTE após Playwright estar pronto
+            if self.telegram is None:
+                try:
+                    self.telegram = TelegramNotifier()
+                except Exception as e:
+                    self.ui.print_warning(f"Falha ao inicializar Telegram: {e}")
+                    # Continua mesmo sem Telegram
+                    class _DummyTelegram:
+                        enabled = False
+                        def __getattr__(self, _):
+                            def _noop(*args, **kwargs):
+                                return None
+                            return _noop
+                    self.telegram = _DummyTelegram()
             return True
         else:
             self.ui.print_error("Falha ao carregar jogo Double")
@@ -236,8 +254,14 @@ class BlazeBot:
                         time.sleep(1)
                         continue
                     
-                    # Verifica se houve mudança significativa
-                    state_hash = hash(str(game_state.get('timer_text', '')) + str(game_state.get('is_betting_period', False)))
+                    # Verifica se houve mudança significativa (compatível com Playwright e Selenium)
+                    timer_val = game_state.get('timer') if game_state else ''
+                    if not timer_val:
+                        timer_val = game_state.get('timer_text', '') if game_state else ''
+                    can_bet_val = False
+                    if game_state:
+                        can_bet_val = bool(game_state.get('can_bet', False) or game_state.get('is_betting_period', False))
+                    state_hash = hash(str(timer_val) + str(can_bet_val))
                     
                     if state_hash != self.last_game_state:
                         self.last_game_state = state_hash
@@ -359,8 +383,8 @@ class BlazeBot:
         
         # Envia mensagem de boas-vindas no Telegram
         print("\n[INFO] Verificando Telegram...")
-        print(f"[INFO] Telegram habilitado: {self.telegram.enabled}")
-        if self.telegram.enabled:
+        print(f"[INFO] Telegram habilitado: {getattr(self.telegram, 'enabled', False)}")
+        if getattr(self.telegram, 'enabled', False):
             print("[INFO] Enviando mensagem de boas-vindas...")
             self.telegram.send_welcome_message()
         else:
@@ -493,12 +517,17 @@ class BlazeBot:
                             self.ui.display_game_history(history[:24])
                             self.ui.print_separator()
                         
-                        # Exibe estado do jogo
-                        self.ui.display_game_state(game_state)
+                        # Adapta estado para o formato esperado pela UI
+                        ui_state = {
+                            'timer_text': game_state.get('timer', ''),
+                            'is_betting_period': game_state.get('can_bet', False),
+                            'recent_colors': [g['color'] for g in history[:10] if g.get('color')]
+                        }
+                        self.ui.display_game_state(ui_state)
                         self.ui.print_separator()
                         
                         # Se estiver em período de aposta e não esperando resultado
-                        if game_state and game_state.get('is_betting_period', False) and not waiting_for_result:
+                        if game_state and (game_state.get('can_bet', False) or game_state.get('is_betting_period', False)) and not waiting_for_result:
                             if current_prediction:
                                 confidence = current_prediction['confidence']
                                 
@@ -536,7 +565,9 @@ class BlazeBot:
                                 if confidence >= config.MIN_CONFIDENCE and not current_bet_placed:
                                     self.ui.print_info("Fazendo aposta...")
                                     
-                                    game_id = self.get_game_id()
+                                    # Gera e registra o ID do jogo/aposta atual
+                                    self.current_bet_game_id = self.get_game_id()
+                                    game_id = self.current_bet_game_id
                                     
                                     if self.automation.place_bet(
                                         current_prediction['color'],
@@ -587,90 +618,66 @@ class BlazeBot:
                         elif waiting_for_result:
                             # Aguarda resultado do jogo
                             self.ui.print_info("Aguardando resultado do jogo...")
-                            
-                            # Verifica se o jogo terminou (timer mostra "Girou" ou "Blaze Girou")
-                            timer_text = game_state.get('timer_text', '') if game_state else ''
-                            timer_lower = timer_text.lower()
-                            
-                            # Detecta quando o jogo acabou (mostra resultado)
-                            # Não está mais girando e mostra resultado
-                            if game_state and ("girou" in timer_lower or "blaze girou" in timer_lower):
-                                # Aguarda um pouco para garantir que o resultado está disponível
-                                time.sleep(1)
-                                
-                                # Obtém resultado atual
-                                result = self.automation.get_current_result()
-                                
-                                # Se não encontrou pelo método direto, tenta obter do histórico
-                                if not result:
-                                    recent_results = self.automation.get_recent_results(limit=1)
-                                    if recent_results:
-                                        result = recent_results[0]
-                                
-                                if result and current_prediction:
-                                    actual_color = result.get('color')
-                                    
-                                    # Determina resultado
-                                    if actual_color == current_prediction['color']:
-                                        bet_result = "WIN"
-                                    else:
-                                        bet_result = "LOSS"
-                                    
-                                    # Atualiza aposta no banco
+
+                            # Tenta obter o resultado diretamente
+                            result = self.automation.get_current_result()
+                            if not result or not result.get('color'):
+                                # Se não houver resultado direto, verifica indicação textual
+                                timer_text = game_state.get('timer_text', '') if game_state else ''
+                                timer_lower = timer_text.lower()
+                                if game_state and ("girou" in timer_lower or "blaze girou" in timer_lower):
+                                    time.sleep(1)
+                                    result = self.automation.get_current_result()
+                                    if not result:
+                                        recent_results = self.automation.get_recent_results(limit=1)
+                                        if recent_results:
+                                            result = recent_results[0]
+
+                            if result and current_prediction:
+                                actual_color = result.get('color')
+                                bet_result = "WIN" if actual_color == current_prediction['color'] else "LOSS"
+
+                                # Atualiza aposta e persiste jogo
+                                with self.lock:
+                                    game_id = self.current_bet_game_id or self.get_game_id()
+                                    self.db.update_bet_result(game_id, actual_color, bet_result)
+                                    self.db.save_game(game_id, actual_color, result.get('number'))
+
+                                # Exibe resultado
+                                self.ui.display_bet_result(
+                                    current_prediction['color'], actual_color, bet_result, current_prediction['confidence']
+                                )
+
+                                # Salva padrões se houver
+                                if current_prediction.get('patterns'):
                                     with self.lock:
-                                        game_id = self.get_game_id()
-                                        self.db.update_bet_result(
-                                            game_id,
-                                            actual_color,
-                                            bet_result
-                                        )
-                                        self.db.save_game(
-                                            game_id,
-                                            actual_color,
-                                            result.get('number')
-                                        )
-                                    
-                                    # Exibe resultado
-                                    self.ui.display_bet_result(
+                                        for pattern in current_prediction['patterns']:
+                                            self.db.save_pattern(
+                                                pattern.get('type', 'unknown'), pattern, pattern.get('confidence', 0)
+                                            )
+
+                                # Envia notificação Telegram com resultado
+                                with self.lock:
+                                    stats = self.db.get_statistics()
+                                    self.telegram.send_bet_result(
                                         current_prediction['color'],
                                         actual_color,
                                         bet_result,
-                                        current_prediction['confidence']
+                                        current_prediction['confidence'],
+                                        stats.get('win_rate', 0.0),
+                                        stats.get('total_bets', 0),
+                                        stats.get('wins', 0)
                                     )
-                                    
-                                    # Salva padrões se houver
-                                    if current_prediction.get('patterns'):
-                                        with self.lock:
-                                            for pattern in current_prediction['patterns']:
-                                                self.db.save_pattern(
-                                                    pattern.get('type', 'unknown'),
-                                                    pattern,
-                                                    pattern.get('confidence', 0)
-                                                )
-                                    
-                                    # Envia notificação Telegram com resultado
-                                    with self.lock:
-                                        stats = self.db.get_statistics()
-                                        self.telegram.send_bet_result(
-                                            current_prediction['color'],
-                                            actual_color,
-                                            bet_result,
-                                            current_prediction['confidence'],
-                                            stats.get('win_rate', 0.0),
-                                            stats.get('total_bets', 0),
-                                            stats.get('wins', 0)
-                                        )
-                                    
-                                    # Reseta flags
-                                    current_bet_placed = False
-                                    waiting_for_result = False
-                                    current_prediction = None
-                                    last_warning_confidence = 0.0
-                                    last_opportunity_confidence = 0.0
-                                    opportunity_lost_sent = False
-                                    
-                                    # Força atualização imediata
-                                    last_update = 0
+
+                                # Reseta flags
+                                current_bet_placed = False
+                                waiting_for_result = False
+                                current_prediction = None
+                                self.current_bet_game_id = None
+                                last_warning_confidence = 0.0
+                                last_opportunity_confidence = 0.0
+                                opportunity_lost_sent = False
+                                last_update = 0
                         else:
                             self.ui.print_info("Aguardando período de apostas...")
                             current_bet_placed = False

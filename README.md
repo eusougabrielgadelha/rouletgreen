@@ -87,6 +87,48 @@ Ou no Windows:
 run.bat
 ```
 
+## 🐧 Setup em Ubuntu (Hostinger VPS)
+
+Para servidores Ubuntu, execute o script de setup que instala dependências Python, bibliotecas do Chromium e o navegador para o Playwright.
+
+1) Atualize o sistema e garanta Python/pip instalados (se necessário):
+```bash
+sudo apt update && sudo apt -y upgrade
+sudo apt -y install python3 python3-pip
+```
+
+2) Rode o script de setup:
+```bash
+bash scripts/setup_ubuntu.sh
+```
+
+Alternativa manual (equivalente ao script):
+```bash
+pip install -r requirements.txt
+python -m playwright install-deps chromium
+python -m playwright install chromium
+```
+
+3) Crie um `.env` na raiz (exemplo):
+```env
+BLAZE_EMAIL=seu_email
+BLAZE_PASSWORD=sua_senha
+TELEGRAM_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_ENABLED=auto
+HEADLESS=true
+```
+
+4) Execute o bot:
+```bash
+python main.py
+```
+
+Notas:
+- Em servidores sem interface gráfica, o app utiliza headless automaticamente; definir `HEADLESS=true` apenas torna explícito.
+- Se `python -m playwright install-deps chromium` solicitar privilégios, rode com `sudo`.
+- O aviso `playwright.sync_api could not be resolved` some após a instalação do Playwright e do Chromium.
+
 ## ⚙️ Configuração
 
 ### Variáveis de Ambiente (.env)

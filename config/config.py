@@ -10,9 +10,9 @@ load_dotenv()
 BLAZE_URL = "https://blaze.bet.br/pt/"
 DOUBLE_URL = "https://blaze.bet.br/pt/games/double"
 
-# Credenciais (deve ser configurado via variáveis de ambiente)
-EMAIL = os.getenv("BLAZE_EMAIL", "gabrielgadelham@gmail.com")
-PASSWORD = os.getenv("BLAZE_PASSWORD", "inDubai2023*")
+# Credenciais (configure exclusivamente via variáveis de ambiente)
+EMAIL = os.getenv("BLAZE_EMAIL", "")
+PASSWORD = os.getenv("BLAZE_PASSWORD", "")
 
 # Configurações do navegador
 # Detecta automaticamente se está em servidor (sem display)
@@ -22,6 +22,10 @@ if not os.getenv('DISPLAY') or os.getenv('DISPLAY') == '':
 else:
     HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'  # Pode ser sobrescrito via .env
 WAIT_TIME = 2  # Tempo de espera padrão em segundos
+
+# Caminho do executável do Google Chrome (Windows)
+# Se estiver em outro local, ajuste esta constante.
+CHROME_BINARY = r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
 
 # Configurações de aposta
 MIN_BET_AMOUNT = 1.0  # Valor mínimo de aposta
@@ -52,10 +56,17 @@ COLORS = {
 DATABASE_PATH = "blaze_data.db"
 
 # Telegram Bot (opcional)
-TELEGRAM_ENABLED = True  # Se False, não envia mensagens
-TELEGRAM_TOKEN = "8487738643:AAHfnEEB6PKN6rDlRKrKkrh6HGRyTYtrge0"
-TELEGRAM_CHAT_ID = "-1003285838290"  # Chat ID do grupo/canal
-TELEGRAM_USER_ID = "570272217"  # User ID (para DMs, se necessário)
+# Habilita automaticamente apenas se houver token e chat id válidos
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "")
+TELEGRAM_ENABLED = (
+    os.getenv("TELEGRAM_ENABLED", "auto").lower() == "true"
+    or (
+        os.getenv("TELEGRAM_ENABLED", "auto").lower() == "auto" and
+        bool(TELEGRAM_TOKEN) and bool(TELEGRAM_CHAT_ID)
+    )
+)
 
 # Configurações de notificações Telegram
 TELEGRAM_WARNING_CONFIDENCE = 0.75  # Envia aviso quando confiança está próxima (75%)

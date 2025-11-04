@@ -229,30 +229,29 @@ class Database:
     def get_statistics(self) -> Dict:
         """Retorna as estatísticas gerais"""
         conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM statistics ORDER BY last_updated DESC LIMIT 1')
-        row = cursor.fetchone()
-        
-        if row:
+        try:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM statistics ORDER BY last_updated DESC LIMIT 1')
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'total_games': row[1],
+                    'total_bets': row[2],
+                    'wins': row[3],
+                    'losses': row[4],
+                    'win_rate': row[5],
+                    'total_profit': row[6]
+                }
             return {
-                'total_games': row[1],
-                'total_bets': row[2],
-                'wins': row[3],
-                'losses': row[4],
-                'win_rate': row[5],
-                'total_profit': row[6]
+                'total_games': 0,
+                'total_bets': 0,
+                'wins': 0,
+                'losses': 0,
+                'win_rate': 0.0,
+                'total_profit': 0.0
             }
-        
-        conn.close()
-        return {
-            'total_games': 0,
-            'total_bets': 0,
-            'wins': 0,
-            'losses': 0,
-            'win_rate': 0.0,
-            'total_profit': 0.0
-        }
+        finally:
+            conn.close()
     
     def update_statistics(self):
         """Atualiza as estatísticas gerais"""

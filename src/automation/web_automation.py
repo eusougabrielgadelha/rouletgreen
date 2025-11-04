@@ -1661,6 +1661,34 @@ class BlazeAutomation:
             
             if not submit_button:
                 print("[ERRO] Botão de submit não encontrado")
+                # Fallback 1: tenta enviar via ENTER no campo de senha
+                try:
+                    password_fields = self.driver.find_elements(By.CSS_SELECTOR, "input[type='password'], input[name='password']")
+                    if password_fields:
+                        password_fields[0].send_keys(Keys.ENTER)
+                        time.sleep(2)
+                        if self.check_if_logged_in():
+                            return True
+                except Exception:
+                    pass
+                # Fallback 2: submete o formulário via JS
+                try:
+                    submitted = self.driver.execute_script("""
+                        var form = document.querySelector('form[data-testid="login-form-email"]');
+                        if (form) {
+                            var evt = new Event('submit', { bubbles: true, cancelable: true });
+                            form.dispatchEvent(evt);
+                            if (typeof form.submit === 'function') { form.submit(); }
+                            return true;
+                        }
+                        return false;
+                    """)
+                    if submitted:
+                        time.sleep(2)
+                        if self.check_if_logged_in():
+                            return True
+                except Exception:
+                    pass
                 return False
             
             # Aguarda o botão ficar clicável (pode ter sido habilitado pelo Turnstile)
@@ -2419,6 +2447,58 @@ class BlazeAutomation:
             print(f"Erro ao fazer aposta: {e}")
             return False
     
+    # ===== Compatibilidade com interface usada no Playwright =====
+    def is_chrome_responsive(self, timeout: float = 5.0) -> bool:
+        """Verifica se o navegador está respondendo executando um JS simples."""
+        try:
+            if not self.driver:
+                return False
+            self.driver.set_script_timeout(max(1, int(timeout)))
+            self.driver.execute_script("return true;")
+            return True
+        except Exception:
+            return False
+
+    def restart_chrome(self) -> bool:
+        """Reinicia o navegador Selenium mantendo configurações básicas."""
+        try:
+            try:
+                if self.driver:
+                    self.driver.quit()
+            except Exception:
+                pass
+            time.sleep(2)
+            self.init_driver()
+            return self.driver is not None
+        except Exception:
+            return False
+
+    def reinitialize_with_login_retry(self, email: str = None, password: str = None, max_retries: int = 2) -> bool:
+        """Reinicializa o navegador e tenta refazer o fluxo inicial mínimo."""
+        retries = 0
+        while retries <= max_retries:
+            if not self.restart_chrome():
+                retries += 1
+                time.sleep(1)
+                continue
+            try:
+                # Acessa a URL base
+                from config import config as _config
+                self.driver.get(_config.BLAZE_URL)
+                time.sleep(2)
+                self.accept_cookies()
+                self.confirm_age()
+                if email and password:
+                    self.login_attempted = True
+                    if self.login(email, password):
+                        self.is_logged_in = True
+                if self.navigate_to_double():
+                    return True
+            except Exception:
+                pass
+            retries += 1
+        return False
+
     def close(self):
         """Fecha o navegador"""
         if self.driver:

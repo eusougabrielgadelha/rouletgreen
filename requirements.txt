@@ -5,7 +5,9 @@ undetected-chromedriver==3.5.4
 setuptools>=65.5.0  # Necessário para distutils em Python 3.12+
 
 # Playwright (RECOMENDADO - melhor para servidor headless)
-playwright==1.40.0
+# Atualizado para compatibilidade com Python 3.13 e greenlet
+greenlet>=3.1.1
+playwright>=1.48.0
 
 beautifulsoup4==4.12.2
 rich==13.7.0
