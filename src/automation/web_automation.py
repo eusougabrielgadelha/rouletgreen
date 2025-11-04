@@ -55,6 +55,42 @@ class BlazeAutomation:
     def init_driver(self):
         """Inicializa o driver do Chrome com técnicas avançadas de bypass do Cloudflare"""
         try:
+            # Detecta qual navegador está disponível
+            chrome_binary = None
+            chrome_paths = [
+                '/usr/bin/google-chrome-stable',
+                '/usr/bin/google-chrome',
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chromium',
+                '/snap/bin/chromium',
+            ]
+            
+            for path in chrome_paths:
+                try:
+                    import subprocess
+                    result = subprocess.run(['which', path.split('/')[-1]], 
+                                          capture_output=True, text=True, timeout=2)
+                    if result.returncode == 0:
+                        chrome_binary = result.stdout.strip()
+                        print(f"[INFO] Navegador encontrado: {chrome_binary}")
+                        break
+                except:
+                    continue
+            
+            # Se não encontrou, tenta detectar via which
+            if not chrome_binary:
+                try:
+                    import subprocess
+                    for cmd in ['google-chrome-stable', 'google-chrome', 'chromium-browser', 'chromium']:
+                        result = subprocess.run(['which', cmd], 
+                                              capture_output=True, text=True, timeout=2)
+                        if result.returncode == 0:
+                            chrome_binary = result.stdout.strip()
+                            print(f"[INFO] Navegador encontrado via which: {chrome_binary}")
+                            break
+                except:
+                    pass
+            
             # Prioriza usar undetected-chromedriver se disponível (melhor para bypass)
             if UC_AVAILABLE:
                 print("[INFO] Usando undetected-chromedriver para melhor bypass do Cloudflare...")
@@ -64,12 +100,19 @@ class BlazeAutomation:
                     if self.headless:
                         options.add_argument("--headless=new")
                     
+                    # Especifica o binário do Chrome se encontrado
+                    if chrome_binary:
+                        options.binary_location = chrome_binary
+                        print(f"[INFO] Usando Chrome em: {chrome_binary}")
+                    
                     # User agent realista e atualizado
-                    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
                     
                     # Configurações para parecer mais humano
                     options.add_argument("--window-size=1920,1080")
                     options.add_argument("--start-maximized")
+                    options.add_argument("--no-sandbox")
+                    options.add_argument("--disable-dev-shm-usage")
                     
                     # Desabilita notificações
                     prefs = {
@@ -107,6 +150,14 @@ class BlazeAutomation:
             # Método padrão (fallback)
             print("[INFO] Usando método padrão do Selenium com técnicas de stealth...")
             chrome_options = Options()
+            
+            # Especifica o binário do Chrome se encontrado
+            if chrome_binary:
+                chrome_options.binary_location = chrome_binary
+                print(f"[INFO] Usando Chrome em: {chrome_binary}")
+            else:
+                print("[AVISO] Chrome não encontrado nos caminhos padrão")
+                print("[INFO] Tentando continuar sem especificar binário...")
             
             if self.headless:
                 chrome_options.add_argument("--headless=new")

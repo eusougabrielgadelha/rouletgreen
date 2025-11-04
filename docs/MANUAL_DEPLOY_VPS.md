@@ -66,14 +66,51 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install python3 python3-pip python3-venv -y
 ```
 
-### 2.3 Instalar Google Chrome/Chromium
-```bash
-# Opção 1: Chromium (mais leve)
-sudo apt install chromium-browser chromium-chromedriver -y
+### 2.3 Instalar Google Chrome/Chromium (OBRIGATÓRIO)
 
-# Opção 2: Google Chrome (recomendado)
+**IMPORTANTE:** O bot precisa do Chrome ou Chromium para funcionar!
+
+#### Opção 1: Chromium (RECOMENDADO para servidores - mais leve)
+```bash
+sudo apt update
+sudo apt install chromium-browser chromium-chromedriver chromium-driver -y
+
+# Verificar instalação
+which chromium-browser
+chromium-browser --version
+```
+
+#### Opção 2: Google Chrome (mais recursos)
+```bash
+# Baixar Chrome
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+
+# Instalar
 sudo apt install ./google-chrome-stable_current_amd64.deb -y
+
+# Instalar dependências que podem faltar
+sudo apt install -f -y
+
+# Verificar instalação
+which google-chrome-stable
+google-chrome-stable --version
+```
+
+#### Opção 3: Chromium via snap (alternativa)
+```bash
+sudo snap install chromium
+```
+
+#### Verificar qual navegador está disponível
+```bash
+# Verificar Chrome
+which google-chrome google-chrome-stable 2>/dev/null
+
+# Verificar Chromium
+which chromium chromium-browser 2>/dev/null
+
+# Verificar versão
+google-chrome-stable --version 2>/dev/null || chromium-browser --version 2>/dev/null
 ```
 
 ### 2.4 Instalar Git (se não estiver instalado)
@@ -267,10 +304,10 @@ cd /home/rouletgreen
 source venv/bin/activate
 
 # Iniciar com PM2 usando o Python do venv
-pm2 start main.py --name blaze-double-analyzer --interpreter venv/bin/python3
+pm2 start main.py --name double --interpreter venv/bin/python3
 
 # OU usando caminho absoluto (mais seguro)
-pm2 start main.py --name blaze-double-analyzer --interpreter /home/rouletgreen/venv/bin/python3
+pm2 start main.py --name double --interpreter /home/rouletgreen/venv/bin/python3
 ```
 
 ### 8.2 Opção Avançada - Usar ecosystem.config.js
@@ -439,18 +476,83 @@ Agora o PM2 iniciará automaticamente após reiniciar o servidor.
 
 ## 🐛 Passo 12: Resolução de Problemas
 
-### 12.1 Chrome não encontrado
+### 12.1 Chrome não encontrado (ERRO COMUM)
+
+**Sintomas:**
+```
+google-chrome: not found
+Chrome instance exited
+```
+
+**Solução:**
+
+#### Verificar se está instalado
 ```bash
-# Verificar se Chrome está instalado
+# Verificar Chrome
+which google-chrome-stable
 which google-chrome
+
+# Verificar Chromium
 which chromium-browser
+which chromium
 
-# Se não encontrar, instalar novamente
-sudo apt install chromium-browser -y
+# Verificar versão
+google-chrome-stable --version 2>/dev/null || chromium-browser --version 2>/dev/null
+```
 
-# Ou usar Chrome
+#### Instalar Chromium (RECOMENDADO - mais fácil)
+```bash
+sudo apt update
+sudo apt install chromium-browser chromium-chromedriver -y
+
+# Verificar
+which chromium-browser
+chromium-browser --version
+```
+
+#### Instalar Google Chrome
+```bash
+# Baixar
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+
+# Instalar
 sudo apt install ./google-chrome-stable_current_amd64.deb -y
+
+# Instalar dependências faltantes
+sudo apt install -f -y
+
+# Verificar
+which google-chrome-stable
+google-chrome-stable --version
+```
+
+#### Instalar dependências do sistema para Chrome
+```bash
+sudo apt install -y \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libxshmfence1 \
+    libxss1 \
+    libgconf-2-4
+```
+
+#### Se ainda não funcionar, verificar logs detalhados
+```bash
+# Ver logs do PM2
+pm2 logs blaze-double-analyzer --err
+
+# Tentar executar manualmente para ver erro completo
+cd /home/rouletgreen
+source venv/bin/activate
+python3 main.py
 ```
 
 ### 12.2 Erro de permissões
