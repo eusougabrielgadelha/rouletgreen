@@ -132,9 +132,10 @@ sudo npm install -g pm2
 
 ### 2.6 Instalar dependências do sistema para Chrome (OBRIGATÓRIO)
 ```bash
+# Para Ubuntu 24.04+ (com nomes atualizados)
 sudo apt install -y \
     libnss3 \
-    libatk-bridge2.0-0 \
+    libatk-bridge2.0-0t64 \
     libdrm2 \
     libxkbcommon0 \
     libxcomposite1 \
@@ -142,18 +143,18 @@ sudo apt install -y \
     libxfixes3 \
     libxrandr2 \
     libgbm1 \
-    libasound2 \
+    libasound2t64 \
     libxshmfence1 \
     libxss1 \
-    libgconf-2-4 \
-    libxrandr2 \
-    libasound2 \
     libpangocairo-1.0-0 \
-    libatk1.0-0 \
+    libatk1.0-0t64 \
     libcairo-gobject2 \
-    libgtk-3-0 \
+    libgtk-3-0t64 \
     libgdk-pixbuf2.0-0 \
-    xvfb  # Para servidor headless (opcional, mas recomendado)
+    xvfb
+
+# Nota: libgconf-2-4 pode não estar disponível em versões mais recentes do Ubuntu
+# É opcional e geralmente não é necessário para Chrome funcionar
 ```
 
 ---
