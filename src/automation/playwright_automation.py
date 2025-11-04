@@ -154,6 +154,21 @@ class BlazeAutomation:
             chosen_ua = random.choice(ua_pool)
             chosen_vp = random.choice(vp_pool)
 
+            # Headers HTTP mais realistas
+            extra_headers = {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0',
+            }
+            
             # Cria contexto com configurações de stealth
             self.context = self.browser.new_context(
                 viewport=chosen_vp,
@@ -162,18 +177,31 @@ class BlazeAutomation:
                 timezone_id='America/Sao_Paulo',
                 permissions=['notifications'],
                 ignore_https_errors=True,
+                extra_http_headers=extra_headers,
             )
             
-            # Injeta scripts de stealth no contexto
+            # Injeta scripts de stealth avançados no contexto
             self.context.add_init_script("""
                 // Remove webdriver property
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
                 
-                // Mock plugins
+                // Mock plugins mais realista
                 Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5]
+                    get: () => {
+                        const plugins = [];
+                        for (let i = 0; i < 5; i++) {
+                            plugins.push({
+                                0: { type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format' },
+                                description: 'Portable Document Format',
+                                filename: 'internal-pdf-viewer',
+                                length: 1,
+                                name: 'Chrome PDF Plugin'
+                            });
+                        }
+                        return plugins;
+                    }
                 });
                 
                 // Mock languages
@@ -181,13 +209,56 @@ class BlazeAutomation:
                     get: () => ['pt-BR', 'pt', 'en-US', 'en']
                 });
                 
-                // Override permissions
+                // Chrome runtime object
+                window.chrome = {
+                    runtime: {}
+                };
+                
+                // Mock permissions
                 const originalQuery = window.navigator.permissions.query;
                 window.navigator.permissions.query = (parameters) => (
                     parameters.name === 'notifications' ?
                         Promise.resolve({ state: Notification.permission }) :
                         originalQuery(parameters)
                 );
+                
+                // Override getBattery se existir
+                if (navigator.getBattery) {
+                    navigator.getBattery = () => Promise.resolve({
+                        charging: true,
+                        chargingTime: 0,
+                        dischargingTime: Infinity,
+                        level: 0.8
+                    });
+                }
+                
+                // Canvas fingerprint protection (adiciona ruído mínimo)
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function() {
+                    const context = this.getContext('2d');
+                    if (context) {
+                        const imageData = context.getImageData(0, 0, this.width, this.height);
+                        for (let i = 0; i < imageData.data.length; i += 4) {
+                            if (Math.random() < 0.001) {
+                                imageData.data[i] = Math.min(255, imageData.data[i] + 1);
+                            }
+                        }
+                        context.putImageData(imageData, 0, 0);
+                    }
+                    return originalToDataURL.apply(this, arguments);
+                };
+                
+                // WebGL fingerprint protection
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, arguments);
+                };
             """)
             
             self.page = self.context.new_page()
@@ -340,8 +411,28 @@ class BlazeAutomation:
             except Exception:
                 return False
 
-            # Pequena espera para Turnstile preencher token (se já liberado)
-            time.sleep(random.uniform(2.0, 4.0))
+            # Aguarda Turnstile resolver (se presente)
+            try:
+                # Verifica se há iframe do Turnstile
+                turnstile_frame = self.page.wait_for_selector('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]', timeout=5000)
+                if turnstile_frame:
+                    print("[INFO] Aguardando resolução do Turnstile...")
+                    # Aguarda até que o token seja gerado ou timeout
+                    self.page.wait_for_function("""
+                        () => {
+                            const iframe = document.querySelector('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]');
+                            if (!iframe) return true;
+                            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                            if (!iframeDoc) return false;
+                            // Verifica se o challenge foi resolvido (sem indicadores de loading/error)
+                            const spinner = iframeDoc.querySelector('[class*="spinner"], [class*="loading"], [class*="error"]');
+                            return !spinner || spinner.style.display === 'none';
+                        }
+                    """, timeout=30000)
+                    time.sleep(random.uniform(1.0, 2.0))
+            except Exception:
+                # Se não houver Turnstile ou já resolvido, continua
+                time.sleep(random.uniform(1.5, 3.0))
 
             # Clica no botão "Entrar" do modal (type=button)
             try:
@@ -358,12 +449,10 @@ class BlazeAutomation:
                 pass
             time.sleep(random.uniform(1.0, 2.0))
 
-            # Se anti-bot detectado, tenta um pequeno ciclo de humanização e revalida
+            # Se anti-bot detectado, aguarda resolução com humanização
             try:
                 if self.detect_antibot():
-                    for _ in range(random.randint(2, 4)):
-                        self.perform_human_tick()
-                        time.sleep(random.uniform(0.3, 0.7))
+                    self.wait_for_challenge_resolution(timeout=30.0)
                     try:
                         self.page.wait_for_load_state('networkidle', timeout=3000)
                     except Exception:
@@ -390,9 +479,17 @@ class BlazeAutomation:
                 self.page.wait_for_load_state('networkidle', timeout=5000)
             except Exception:
                 pass
+            
+            # Se detectar challenge, aguarda resolução
+            try:
+                if self.detect_antibot():
+                    self.wait_for_challenge_resolution(timeout=30.0)
+            except Exception:
+                pass
+            
             # Peq. humanização no warm-up inicial
             for _ in range(random.randint(2, 4)):
-                self.perform_human_tick()
+                self.perform_human_tick(force=True)
                 time.sleep(random.uniform(0.3, 0.8))
             time.sleep(2)  # estabilização adicional
             return True
@@ -690,6 +787,55 @@ class BlazeAutomation:
             return self.last_antibot_detected
         except Exception:
             return False
+    
+    def wait_for_challenge_resolution(self, timeout: float = 30.0) -> bool:
+        """Aguarda resolução de challenge do Cloudflare/Turnstile com humanização durante a espera."""
+        try:
+            if not self.detect_antibot():
+                return True  # Sem challenge
+            
+            print("[INFO] Challenge detectado. Aguardando resolução com comportamento humano...")
+            start_time = time.time()
+            
+            while time.time() - start_time < timeout:
+                # Humanização durante a espera
+                if random.random() < 0.4:
+                    self.perform_human_tick(force=True)
+                
+                # Verifica se foi resolvido
+                resolved = self.page.evaluate("""
+                    () => {
+                        const title = (document.title||'').toLowerCase();
+                        if (title.includes('attention required') || title.includes('checking your browser')) return false;
+                        const iframe = document.querySelector('iframe[src*="challenges.cloudflare.com"], iframe[src*="turnstile"]');
+                        if (iframe) {
+                            try {
+                                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                                if (iframeDoc) {
+                                    const spinner = iframeDoc.querySelector('[class*="spinner"], [class*="loading"]');
+                                    if (spinner && spinner.style.display !== 'none') return false;
+                                }
+                            } catch(e) {}
+                        }
+                        // Verifica se há elementos indicando que passou
+                        const success = document.querySelector('[data-success], .success, [class*="verified"]');
+                        return !iframe || (iframe && success);
+                    }
+                """)
+                
+                if resolved:
+                    print("[SUCCESS] Challenge resolvido")
+                    self.antibot_strikes = max(0, self.antibot_strikes - 3)  # Reduz strikes após resolver
+                    time.sleep(random.uniform(1.0, 2.0))
+                    return True
+                
+                time.sleep(random.uniform(0.5, 1.5))
+            
+            print("[AVISO] Timeout aguardando resolução do challenge")
+            return False
+        except Exception as e:
+            print(f"[AVISO] Erro ao aguardar challenge: {e}")
+            return False
 
     def get_diagnostic_summary(self) -> dict:
         """Resumo estruturado da possível causa de não-responsividade/fechamento."""
@@ -723,14 +869,17 @@ class BlazeAutomation:
         return summary
 
     # ===== Humanização de interação =====
-    def perform_human_tick(self) -> None:
+    def perform_human_tick(self, force: bool = False) -> None:
         """Executa uma pequena sequência pseudo-aleatória de ações humanas para reduzir detecção de bot.
         Mantém frequência moderada e usa áreas seguras para clique/hover/scroll.
+        
+        Args:
+            force: Se True, executa mesmo se não tiver passado o intervalo mínimo
         """
         try:
             now = time.time()
-            # Limita frequência: entre 4 e 10s
-            if now - self.last_human_action_time < random.uniform(4.0, 10.0):
+            # Limita frequência: entre 4 e 10s (a menos que force=True)
+            if not force and now - self.last_human_action_time < random.uniform(4.0, 10.0):
                 return
 
             self.last_human_action_time = now

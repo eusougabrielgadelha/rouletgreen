@@ -529,6 +529,10 @@ class BlazeBot:
                         last_humanize_at = now
                         try:
                             self.automation.perform_human_tick()
+                            # Verifica e trata challenge se detectado
+                            if self.automation.detect_antibot() and getattr(self.automation, 'antibot_strikes', 0) >= 1:
+                                self.ui.print_warning("Challenge detectado - aguardando resolução...")
+                                self.automation.wait_for_challenge_resolution(timeout=20.0)
                         except Exception:
                             pass
                     
