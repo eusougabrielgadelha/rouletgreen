@@ -196,23 +196,57 @@ class BlazeAutomation:
                     
                     # Inicializa undetected-chromedriver com timeout maior e configurações específicas
                     try:
+                        # Limpa processos Chrome órfãos antes de iniciar
+                        try:
+                            import subprocess
+                            subprocess.run(['pkill', '-f', 'chrome'], 
+                                         capture_output=True, timeout=2)
+                            subprocess.run(['pkill', '-f', 'chromedriver'], 
+                                         capture_output=True, timeout=2)
+                            time.sleep(1)
+                        except:
+                            pass
+                        
                         # Tenta criar diretórios temporários
+                        print("[INFO] Criando diretórios temporários para Chrome...")
                         os.makedirs('/tmp/chrome-user-data', exist_ok=True)
                         os.makedirs('/tmp/chrome-data', exist_ok=True)
                         os.makedirs('/tmp/chrome-cache', exist_ok=True)
-                    except:
-                        pass
-                    
-                    self.driver = uc.Chrome(
-                        options=options,
-                        version_main=None,  # Auto-detecta versão do Chrome
-                        use_subprocess=True,
-                        driver_executable_path=None,
-                        timeout=120,  # Timeout maior para servidor headless (2 minutos)
-                        keep_alive=True  # Mantém conexão viva
-                    )
-                    
-                    print("[SUCCESS] undetected-chromedriver inicializado com sucesso!")
+                        
+                        # Limpa diretórios antigos se estiverem muito grandes
+                        try:
+                            import shutil
+                            for dir_path in ['/tmp/chrome-user-data', '/tmp/chrome-data', '/tmp/chrome-cache']:
+                                if os.path.exists(dir_path):
+                                    total_size = sum(os.path.getsize(os.path.join(dirpath, filename))
+                                                   for dirpath, dirnames, filenames in os.walk(dir_path)
+                                                   for filename in filenames)
+                                    # Se maior que 100MB, limpa
+                                    if total_size > 100 * 1024 * 1024:
+                                        print(f"[INFO] Limpando diretório grande: {dir_path} ({total_size / 1024 / 1024:.1f}MB)")
+                                        shutil.rmtree(dir_path)
+                                        os.makedirs(dir_path, exist_ok=True)
+                        except:
+                            pass
+                        
+                        print("[INFO] Inicializando undetected-chromedriver (timeout: 120s)...")
+                        print("[INFO] Isso pode levar até 2 minutos no servidor headless...")
+                        
+                        self.driver = uc.Chrome(
+                            options=options,
+                            version_main=None,  # Auto-detecta versão do Chrome
+                            use_subprocess=True,
+                            driver_executable_path=None,
+                            timeout=120,  # Timeout maior para servidor headless (2 minutos)
+                            keep_alive=True  # Mantém conexão viva
+                        )
+                        
+                        print("[SUCCESS] undetected-chromedriver inicializado com sucesso!")
+                    except Exception as init_error:
+                        print(f"[ERRO] Falha durante inicialização do Chrome: {init_error}")
+                        import traceback
+                        traceback.print_exc()
+                        raise
                     
                     # Injeta scripts adicionais de stealth
                     self._inject_stealth_scripts()
@@ -225,7 +259,37 @@ class BlazeAutomation:
                     return self.driver
                     
                 except Exception as e:
+                    error_msg = str(e)
                     print(f"[AVISO] Erro ao usar undetected-chromedriver: {e}")
+                    
+                    # Diagnóstico adicional
+                    if "cannot connect to chrome" in error_msg.lower() or "chrome not reachable" in error_msg.lower():
+                        print("[DIAGNÓSTICO] Chrome iniciou mas não está respondendo")
+                        print("[INFO] Verificando processos Chrome...")
+                        try:
+                            import subprocess
+                            chrome_processes = subprocess.run(
+                                ['ps', 'aux'], 
+                                capture_output=True, 
+                                text=True, 
+                                timeout=2
+                            )
+                            if 'chrome' in chrome_processes.stdout.lower():
+                                print("[INFO] Processos Chrome encontrados - podem estar travados")
+                                print("[INFO] Tente: killall chrome 2>/dev/null")
+                                print("[INFO] Tentando limpar processos órfãos...")
+                                try:
+                                    subprocess.run(['killall', '-9', 'chrome'], 
+                                                 capture_output=True, timeout=2)
+                                    subprocess.run(['killall', '-9', 'chromedriver'], 
+                                                 capture_output=True, timeout=2)
+                                    time.sleep(2)
+                                    print("[INFO] Processos limpos, tentando novamente...")
+                                except:
+                                    pass
+                        except Exception as diag_error:
+                            print(f"[AVISO] Erro no diagnóstico: {diag_error}")
+                    
                     print("[INFO] Tentando método padrão do Selenium...")
             
             # Método padrão (fallback)
