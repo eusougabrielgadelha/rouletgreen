@@ -8,6 +8,7 @@ setuptools>=65.5.0  # Necessário para distutils em Python 3.12+
 # Atualizado para compatibilidade com Python 3.13 e greenlet
 greenlet>=3.1.1
 playwright>=1.48.0
+playwright-stealth>=1.0.6
 
 beautifulsoup4==4.12.2
 rich==13.7.0

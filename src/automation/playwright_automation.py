@@ -18,6 +18,14 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     print("[AVISO] Playwright não está instalado")
 
+# Tenta importar playwright-stealth (melhor evasão de detecção)
+try:
+    from playwright_stealth import stealth_sync
+    STEALTH_AVAILABLE = True
+except ImportError:
+    STEALTH_AVAILABLE = False
+    print("[AVISO] playwright-stealth não está instalado - usando stealth manual")
+
 # Adiciona o diretório raiz ao path para importar config
 root_dir = os.path.join(os.path.dirname(__file__), '..', '..')
 sys.path.insert(0, os.path.abspath(root_dir))
@@ -65,6 +73,10 @@ class BlazeAutomation:
         self.challenge_cooldown_until = 0.0
         # Caminho para persistir cookies/session
         self.storage_state_path = os.path.join(os.path.abspath(root_dir), 'storage_state.json')
+        # Proxy rotativo
+        self.proxy_list = []
+        self.current_proxy_index = 0
+        self._init_proxy_list()
         
         # Cache de resultados para performance
         self._results_cache = {
@@ -75,6 +87,48 @@ class BlazeAutomation:
         
         # Compatibilidade: driver aponta para page (para código existente)
         self.driver = None  # Será definido como self.page após init
+    
+    def _init_proxy_list(self):
+        """Inicializa lista de proxies para rotação."""
+        if not config.USE_PROXY or not config.PROXY_URL:
+            return
+        try:
+            # Suporta múltiplos proxies separados por vírgula
+            proxies = [p.strip() for p in config.PROXY_URL.split(',')]
+            for proxy_url in proxies:
+                if proxy_url:
+                    # Parse do proxy
+                    if '://' not in proxy_url:
+                        proxy_url = 'http://' + proxy_url
+                    self.proxy_list.append(proxy_url)
+            if self.proxy_list:
+                print(f"[INFO] {len(self.proxy_list)} proxy(s) configurado(s) para rotação")
+        except Exception as e:
+            print(f"[AVISO] Erro ao inicializar proxies: {e}")
+    
+    def _get_next_proxy(self) -> dict:
+        """Retorna próximo proxy da lista (rotação round-robin)."""
+        if not self.proxy_list:
+            return None
+        proxy_url = self.proxy_list[self.current_proxy_index % len(self.proxy_list)]
+        self.current_proxy_index += 1
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(proxy_url)
+            proxy_dict = {
+                'server': f"{parsed.scheme}://{parsed.hostname}:{parsed.port}" if parsed.port else f"{parsed.scheme}://{parsed.hostname}",
+            }
+            # Adiciona auth se especificado separadamente
+            if config.PROXY_USERNAME and config.PROXY_PASSWORD:
+                proxy_dict['username'] = config.PROXY_USERNAME
+                proxy_dict['password'] = config.PROXY_PASSWORD
+            elif parsed.username and parsed.password:
+                proxy_dict['username'] = parsed.username
+                proxy_dict['password'] = parsed.password
+            return proxy_dict
+        except Exception as e:
+            print(f"[AVISO] Erro ao parsear proxy: {e}")
+            return None
     
     def init_driver(self):
         """Inicializa o navegador Playwright"""
@@ -188,6 +242,12 @@ class BlazeAutomation:
                     context_kwargs['storage_state'] = self.storage_state_path
             except Exception:
                 pass
+            
+            # Adiciona proxy se configurado
+            proxy_config = self._get_next_proxy()
+            if proxy_config:
+                context_kwargs['proxy'] = proxy_config
+                print(f"[INFO] Usando proxy: {proxy_config.get('server', 'unknown')}")
 
             # Cria contexto com configurações de stealth
             self.context = self.browser.new_context(**context_kwargs)
@@ -274,6 +334,14 @@ class BlazeAutomation:
             """)
             
             self.page = self.context.new_page()
+            
+            # Aplica playwright-stealth se disponível (melhor evasão)
+            if STEALTH_AVAILABLE:
+                try:
+                    stealth_sync(self.page)
+                    print("[INFO] playwright-stealth aplicado")
+                except Exception as e:
+                    print(f"[AVISO] Erro ao aplicar stealth: {e}")
 
             # Intercepta endpoints ruidosos/irrelevantes
             try:

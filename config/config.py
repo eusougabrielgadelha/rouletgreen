@@ -60,6 +60,14 @@ COLORS = {
 # Database
 DATABASE_PATH = "blaze_data.db"
 
+# Proxy (opcional - para rotar IPs e reduzir detecção)
+# Formato: http://user:pass@host:port ou http://host:port
+# Se múltiplos proxies, separar por vírgula para rotação
+PROXY_URL = os.getenv("PROXY_URL", "")  # Ex: "http://proxy1:port,http://proxy2:port"
+PROXY_USERNAME = os.getenv("PROXY_USERNAME", "")
+PROXY_PASSWORD = os.getenv("PROXY_PASSWORD", "")
+USE_PROXY = bool(PROXY_URL)
+
 # Telegram Bot (opcional)
 # Habilita automaticamente apenas se houver token e chat id válidos
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
