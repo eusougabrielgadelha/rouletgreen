@@ -125,6 +125,17 @@ class BlazeAutomation:
                     options.add_argument("--start-maximized")
                     options.add_argument("--no-sandbox")
                     options.add_argument("--disable-dev-shm-usage")
+                    options.add_argument("--disable-gpu")
+                    options.add_argument("--disable-software-rasterizer")
+                    options.add_argument("--disable-extensions")
+                    options.add_argument("--disable-setuid-sandbox")
+                    options.add_argument("--disable-web-security")
+                    options.add_argument("--disable-features=VizDisplayCompositor")
+                    # Para servidor headless
+                    options.add_argument("--remote-debugging-port=9222")
+                    options.add_argument("--disable-background-timer-throttling")
+                    options.add_argument("--disable-backgrounding-occluded-windows")
+                    options.add_argument("--disable-renderer-backgrounding")
                     
                     # Desabilita notificações
                     prefs = {
@@ -206,12 +217,19 @@ class BlazeAutomation:
             if self.headless:
                 chrome_options.add_argument("--headless=new")
             
-            # Opções de segurança e compatibilidade
+            # Opções de segurança e compatibilidade (essenciais para servidor headless)
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-setuid-sandbox")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--disable-software-rasterizer")
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_argument("--window-size=1920,1080")
             chrome_options.add_argument("--start-maximized")
+            # Para servidor headless sem display
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
             
             # Opções para suprimir erros de GPU/Virtualização
             chrome_options.add_argument("--disable-gpu")

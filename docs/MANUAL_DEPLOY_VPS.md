@@ -130,7 +130,7 @@ sudo apt install -y nodejs
 sudo npm install -g pm2
 ```
 
-### 2.6 Instalar dependências do sistema para Chrome
+### 2.6 Instalar dependências do sistema para Chrome (OBRIGATÓRIO)
 ```bash
 sudo apt install -y \
     libnss3 \
@@ -143,7 +143,17 @@ sudo apt install -y \
     libxrandr2 \
     libgbm1 \
     libasound2 \
-    libxshmfence1
+    libxshmfence1 \
+    libxss1 \
+    libgconf-2-4 \
+    libxrandr2 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libatk1.0-0 \
+    libcairo-gobject2 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    xvfb  # Para servidor headless (opcional, mas recomendado)
 ```
 
 ---
