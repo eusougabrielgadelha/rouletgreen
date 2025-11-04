@@ -390,11 +390,11 @@ class BlazeBot:
         else:
             print("[AVISO] Telegram não está habilitado. Verifique a configuração em config.py")
         
-        # Inicia threads de monitoramento e análise
-        self.monitor_thread = threading.Thread(target=self.monitor_game_loop, daemon=True)
+        # Inicia apenas a thread de análise.
+        # IMPORTANTE: Playwright (sync API) não é thread-safe; todas as chamadas devem ocorrer na mesma thread
+        # em que o navegador foi criado. Portanto, o monitoramento (acesso ao DOM) será feito no loop principal
+        # abaixo, evitando o erro "cannot switch to a different thread".
         self.analyzer_thread = threading.Thread(target=self.analyzer_loop, daemon=True)
-        
-        self.monitor_thread.start()
         self.analyzer_thread.start()
         
         # Variáveis para controle de UI
@@ -476,18 +476,33 @@ class BlazeBot:
                                         self.ui.print_warning("Não foi possível restaurar login - continuando sem login")
                                         self.automation.is_logged_in = False
                     
-                    # Obtém estado atual do jogo (da queue ou diretamente)
+                    # Obtém estado atual do jogo diretamente (mesma thread do Playwright)
                     game_state = None
-                    if not self.game_state_queue.empty():
-                        game_state = self.game_state_queue.get()
-                    else:
-                        # Fallback: obtém diretamente se queue estiver vazia
-                        try:
-                            game_state = self.automation.get_current_game_state()
-                        except Exception as e:
-                            self.ui.print_warning(f"Erro ao obter estado do jogo: {e}")
-                            time.sleep(1)
-                            continue
+                    try:
+                        game_state = self.automation.get_current_game_state()
+                    except Exception as e:
+                        self.ui.print_warning(f"Erro ao obter estado do jogo: {e}")
+                        time.sleep(1)
+                        continue
+
+                    # Obtém resultados recentes diretamente e alimenta fila/DB (mesma thread do Playwright)
+                    try:
+                        recent_results = self.automation.get_recent_results(limit=24, check_changes=True)
+                    except Exception as e:
+                        self.ui.print_warning(f"Erro ao obter resultados: {e}")
+                        time.sleep(1)
+                        recent_results = []
+                    
+                    if recent_results:
+                        results_hash = hash(str([(r.get('color'), r.get('number')) for r in recent_results]))
+                        if results_hash != self.last_results_hash:
+                            self.last_results_hash = results_hash
+                            with self.lock:
+                                for result in recent_results:
+                                    if result.get('color'):
+                                        unique_id = f"game_{result.get('color')}_{result.get('number', 0)}_{int(time.time())}"
+                                        self.db.save_game(unique_id, result.get('color'), result.get('number'))
+                            self.results_queue.put(recent_results)
                     
                     # Obtém histórico do banco
                     with self.lock:
@@ -738,8 +753,6 @@ class BlazeBot:
         self.running = False
         
         # Aguarda threads finalizarem
-        if self.monitor_thread:
-            self.monitor_thread.join(timeout=2)
         if self.analyzer_thread:
             self.analyzer_thread.join(timeout=2)
         
