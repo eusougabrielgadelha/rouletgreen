@@ -332,40 +332,26 @@ class BlazeAutomation:
             
             results = []
             
-            # Extrai resultados usando JavaScript
+            # Extrai resultados da seção "Giros Anteriores"
             results_js = self.page.evaluate("""
                 () => {
                     const results = [];
-                    const tiles = document.querySelectorAll('.tile, [class*="tile"], [data-color]');
-                    
-                    tiles.forEach(tile => {
-                        const classes = tile.className || '';
+                    const entries = document.querySelectorAll('#roulette-recent .roulette-previous .entry .sm-box');
+                    entries.forEach(entry => {
+                        const classes = entry.className || '';
                         let color = null;
-                        
-                        if (classes.includes('red') || classes.includes('lg-box red')) {
-                            color = 'red';
-                        } else if (classes.includes('black') || classes.includes('lg-box black')) {
-                            color = 'black';
-                        } else if (classes.includes('white') || classes.includes('lg-box white')) {
-                            color = 'white';
+                        if (classes.includes('red')) color = 'red';
+                        else if (classes.includes('black')) color = 'black';
+                        else if (classes.includes('white')) color = 'white';
+                        if (!color) return;
+                        let number = null;
+                        const numEl = entry.querySelector('.number');
+                        if (numEl) {
+                            const t = (numEl.innerText || numEl.textContent || '').trim();
+                            if (/^\d+$/.test(t)) number = parseInt(t);
                         }
-                        
-                        if (color) {
-                            let number = null;
-                            if (color !== 'white') {
-                                const numberElem = tile.querySelector('.number');
-                                if (numberElem) {
-                                    const numText = (numberElem.innerText || numberElem.textContent || '').trim();
-                                    if (numText && /^\\d+$/.test(numText)) {
-                                        number = parseInt(numText);
-                                    }
-                                }
-                            }
-                            
-                            results.push({ color, number });
-                        }
+                        results.push({ color, number });
                     });
-                    
                     return results.slice(0, 24);
                 }
             """)
@@ -397,33 +383,21 @@ class BlazeAutomation:
         try:
             state_js = self.page.evaluate("""
                 () => {
-                    const state = {
-                        timer: null,
-                        status: 'waiting',
-                        can_bet: false
-                    };
-                    
-                    // Extrai timer
-                    const timerElems = document.querySelectorAll('[class*="timer"], [class*="countdown"], [id*="timer"]');
-                    timerElems.forEach(elem => {
-                        const text = (elem.innerText || elem.textContent || '').trim();
-                        if (text && /\\d+/.test(text)) {
-                            state.timer = text;
-                        }
-                    });
-                    
-                    // Verifica status
-                    const statusText = document.body.innerText || '';
-                    if (statusText.includes('Girando')) {
+                    const state = { timer: null, status: 'waiting', can_bet: false };
+                    const tl = document.querySelector('#roulette-timer .time-left');
+                    const text = tl ? (tl.innerText || tl.textContent || '').trim() : '';
+                    state.timer = text;
+                    if (text.toLowerCase().includes('girando...')) {
                         state.status = 'spinning';
-                    } else if (statusText.includes('Girando em')) {
+                        state.can_bet = false;
+                    } else if (text.toLowerCase().includes('girando em')) {
                         state.status = 'countdown';
+                        // quando mostra "Girando em <span>mm:ss</span>" normalmente apostas estão abertas
                         state.can_bet = true;
                     } else {
                         state.status = 'waiting';
                         state.can_bet = true;
                     }
-                    
                     return state;
                 }
             """)
@@ -441,36 +415,27 @@ class BlazeAutomation:
         try:
             result_js = self.page.evaluate("""
                 () => {
-                    const selectedTiles = document.querySelectorAll('.tile.selected, [class*="tile"][class*="selected"]');
-                    
-                    for (const tile of selectedTiles) {
-                        const classes = tile.className || '';
+                    // Resultado atual pode estar no slider com destaque (borda/branco) logo após girar
+                    const entries = document.querySelectorAll('#roulette-slider-entries .lg-box');
+                    for (const el of entries) {
+                        const style = el.getAttribute('style') || '';
+                        const hasBorder = style.includes('border');
+                        const classes = el.className || '';
+                        if (!hasBorder) continue;
                         let color = null;
-                        
-                        if (classes.includes('red')) {
-                            color = 'red';
-                        } else if (classes.includes('black')) {
-                            color = 'black';
-                        } else if (classes.includes('white')) {
-                            color = 'white';
-                        }
-                        
-                        if (color) {
-                            let number = null;
-                            if (color !== 'white') {
-                                const numberElem = tile.querySelector('.number');
-                                if (numberElem) {
-                                    const numText = (numberElem.innerText || numberElem.textContent || '').trim();
-                                    if (numText && /^\\d+$/.test(numText)) {
-                                        number = parseInt(numText);
-                                    }
-                                }
+                        if (classes.includes('red')) color = 'red';
+                        else if (classes.includes('black')) color = 'black';
+                        else if (classes.includes('white')) color = 'white';
+                        let number = null;
+                        if (color !== 'white') {
+                            const numEl = el.querySelector('.number');
+                            if (numEl) {
+                                const t = (numEl.innerText || numEl.textContent || '').trim();
+                                if (/^\d+$/.test(t)) number = parseInt(t);
                             }
-                            
-                            return { color, number };
                         }
+                        if (color) return { color, number };
                     }
-                    
                     return null;
                 }
             """)
