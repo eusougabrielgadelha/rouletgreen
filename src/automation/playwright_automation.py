@@ -57,6 +57,8 @@ class BlazeAutomation:
         self.last_console_error = None
         self.last_response_status_error = None
         self.last_antibot_detected = False
+        # Humanização
+        self.last_human_action_time = 0.0
         
         # Cache de resultados para performance
         self._results_cache = {
@@ -662,6 +664,87 @@ class BlazeAutomation:
         except Exception:
             pass
         return summary
+
+    # ===== Humanização de interação =====
+    def perform_human_tick(self) -> None:
+        """Executa uma pequena sequência pseudo-aleatória de ações humanas para reduzir detecção de bot.
+        Mantém frequência moderada e usa áreas seguras para clique/hover/scroll.
+        """
+        try:
+            now = time.time()
+            # Limita frequência: entre 4 e 10s
+            if now - self.last_human_action_time < random.uniform(4.0, 10.0):
+                return
+
+            self.last_human_action_time = now
+
+            # Viewport
+            vp = self.page.viewport_size or { 'width': 1280, 'height': 720 }
+            width = vp.get('width', 1280)
+            height = vp.get('height', 720)
+
+            # 1) Movimento do mouse com passos suaves
+            def _rand_coord():
+                margin_x = int(width * 0.08)
+                margin_y = int(height * 0.08)
+                return (
+                    random.randint(margin_x, max(margin_x + 1, width - margin_x)),
+                    random.randint(margin_y, max(margin_y + 1, height - margin_y)),
+                )
+
+            x1, y1 = _rand_coord()
+            x2, y2 = _rand_coord()
+            steps = random.randint(12, 28)
+            try:
+                self.page.mouse.move(x1, y1, steps=int(steps/2))
+                self.page.mouse.move(x2, y2, steps=steps)
+            except Exception:
+                pass
+
+            # 2) Hover em elementos comuns
+            hover_candidates = [
+                '#roulette-recent', '#roulette-controller', 'header', '.logo',
+                '.entries.main', '.balance-input-field', '#roulette-timer',
+            ]
+            random.shuffle(hover_candidates)
+            for sel in hover_candidates[:random.randint(1, 2)]:
+                try:
+                    el = self.page.query_selector(sel)
+                    if el:
+                        box = el.bounding_box()
+                        if box:
+                            hx = int(box['x'] + box['width'] * random.uniform(0.2, 0.8))
+                            hy = int(box['y'] + box['height'] * random.uniform(0.2, 0.8))
+                            self.page.mouse.move(hx, hy, steps=random.randint(6, 18))
+                            time.sleep(random.uniform(0.05, 0.15))
+                except Exception:
+                    continue
+
+            # 3) Scroll suave (para cima/baixo pequeno)
+            try:
+                dy = random.choice([1, -1]) * random.randint(80, 240)
+                self.page.mouse.wheel(0, dy)
+                time.sleep(random.uniform(0.05, 0.2))
+                if random.random() < 0.35:
+                    dy2 = (-dy) + random.randint(-60, 60)
+                    self.page.mouse.wheel(0, dy2)
+            except Exception:
+                pass
+
+            # 4) Clique esporádico em área segura (sem enviar form)
+            try:
+                if random.random() < 0.45:
+                    cx, cy = _rand_coord()
+                    self.page.mouse.click(cx, cy, delay=random.randint(20, 80))
+            except Exception:
+                pass
+
+            # 5) Pequeno think time
+            time.sleep(random.uniform(0.05, 0.2))
+
+        except Exception:
+            # Não deixa exceções daqui quebrarem o fluxo
+            pass
     
     def check_if_logged_in(self) -> bool:
         """Verifica se está logado"""

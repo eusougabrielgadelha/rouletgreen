@@ -361,6 +361,7 @@ class BlazeBot:
         last_chrome_check = 0
         recovery_attempts = 0
         next_recovery_allowed_at = 0
+        last_humanize_at = 0.0
         
         # Loop de inicialização com recuperação
         max_init_retries = 3
@@ -509,6 +510,15 @@ class BlazeBot:
                                         unique_id = f"game_{result.get('color')}_{result.get('number', 0)}_{int(time.time())}"
                                         self.db.save_game(unique_id, result.get('color'), result.get('number'))
                             self.results_queue.put(recent_results)
+
+                    # Humanização periódica (não bloqueante)
+                    now = time.time()
+                    if now - last_humanize_at >= 3.0:
+                        last_humanize_at = now
+                        try:
+                            self.automation.perform_human_tick()
+                        except Exception:
+                            pass
                     
                     # Obtém histórico do banco
                     with self.lock:
