@@ -26,7 +26,7 @@ source venv/bin/activate
 
 # Parar aplicação
 echo "⏸️  Parando aplicação..."
-pm2 stop blaze-double-analyzer || echo "Aplicação não estava rodando"
+pm2 stop blaze-double-analyzer 2>/dev/null || echo "Aplicação não estava rodando"
 
 # Atualizar código
 echo "📥 Atualizando código do GitHub..."

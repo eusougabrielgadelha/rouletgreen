@@ -258,7 +258,23 @@ mkdir -p logs
 
 ## 🎯 Passo 8: Iniciar o Projeto com PM2
 
-### 8.1 Iniciar aplicação
+### 8.1 Opção Simples - Iniciar diretamente (RECOMENDADO)
+```bash
+# Navegar para o diretório do projeto
+cd /home/rouletgreen
+
+# Ativar ambiente virtual (se ainda não estiver ativado)
+source venv/bin/activate
+
+# Iniciar com PM2 usando o Python do venv
+pm2 start main.py --name blaze-double-analyzer --interpreter venv/bin/python3
+
+# OU usando caminho absoluto (mais seguro)
+pm2 start main.py --name blaze-double-analyzer --interpreter /home/rouletgreen/venv/bin/python3
+```
+
+### 8.2 Opção Avançada - Usar ecosystem.config.js
+Se preferir usar o arquivo de configuração (mais controle):
 ```bash
 pm2 start ecosystem.config.js
 ```
