@@ -19,6 +19,8 @@ blaze_data.db
 
 # Variáveis de ambiente
 .env
+.env.local
+.env.*.local
 
 # IDE
 .vscode/
