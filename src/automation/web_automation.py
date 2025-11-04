@@ -429,14 +429,75 @@ class BlazeAutomation:
                 try:
                     self.driver = webdriver.Chrome(options=chrome_options)
                 except Exception as e2:
+                    # Diagnóstico adicional detalhado
+                    error_msg = str(e2)
+                    diagnostics = []
+                    
+                    # Verifica se o Chrome realmente existe e funciona
+                    if chrome_binary:
+                        try:
+                            import subprocess
+                            # Testa execução básica
+                            test_result = subprocess.run(
+                                [chrome_binary, '--headless', '--disable-gpu', '--no-sandbox', '--version'],
+                                capture_output=True,
+                                text=True,
+                                timeout=10
+                            )
+                            if test_result.returncode != 0:
+                                diagnostics.append(f"- Chrome não consegue executar (código {test_result.returncode})")
+                                diagnostics.append(f"  Erro: {test_result.stderr[:200]}")
+                            else:
+                                diagnostics.append(f"- Chrome executou com sucesso: {test_result.stdout.strip()}")
+                        except Exception as test_error:
+                            diagnostics.append(f"- Erro ao testar Chrome: {test_error}")
+                    
+                    # Verifica dependências faltando
+                    try:
+                        import subprocess
+                        missing_deps = []
+                        deps_to_check = {
+                            'libnss3': 'libnss3',
+                            'libatk-bridge2.0-0': 'libatk-bridge2.0-0',
+                            'libgbm1': 'libgbm1',
+                            'libxss1': 'libxss1',
+                            'libgtk-3-0': 'libgtk-3-0'
+                        }
+                        for key, pkg in deps_to_check.items():
+                            result = subprocess.run(
+                                ['dpkg', '-l', pkg],
+                                capture_output=True,
+                                text=True,
+                                timeout=2
+                            )
+                            if 'ii' not in result.stdout:  # 'ii' = instalado corretamente
+                                missing_deps.append(pkg)
+                        if missing_deps:
+                            diagnostics.append(f"- Dependências faltando: {', '.join(missing_deps)}")
+                            diagnostics.append(f"  Instale com: sudo apt install -y {' '.join(missing_deps)}")
+                    except:
+                        pass
+                    
+                    # Verifica se undetected-chromedriver está instalado
+                    if not UC_AVAILABLE:
+                        diagnostics.append("- undetected-chromedriver não está instalado")
+                        diagnostics.append("  Instale com: pip install undetected-chromedriver")
+                    
                     raise Exception(
-                        f"Erro ao inicializar ChromeDriver. Detalhes:\n"
-                        f"1. Erro com ChromeDriverManager: {str(e)}\n"
-                        f"2. Erro sem service: {str(e2)}\n\n"
-                        f"Tente:\n"
-                        f"- Instalar: pip install undetected-chromedriver\n"
-                        f"- Verificar se o Chrome está instalado\n"
-                        f"- Limpar cache: deletar pasta .wdm em seu diretório home"
+                        f"Erro ao inicializar ChromeDriver.\n\n"
+                        f"Detalhes:\n"
+                        f"1. Erro com ChromeDriverManager: {str(e)[:200]}\n"
+                        f"2. Erro sem service: {str(e2)[:200]}\n"
+                        + ("\n".join(diagnostics) if diagnostics else "\n- Nenhum diagnóstico adicional disponível") + "\n\n"
+                        f"Soluções:\n"
+                        f"1. Instalar dependências:\n"
+                        f"   sudo apt install -y libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libxshmfence1 libxss1 libgconf-2-4 libpangocairo-1.0-0 libatk1.0-0 libcairo-gobject2 libgtk-3-0 libgdk-pixbuf2.0-0 xvfb\n"
+                        f"2. Testar Chrome manualmente:\n"
+                        f"   /usr/bin/google-chrome-stable --headless --disable-gpu --no-sandbox --version\n"
+                        f"3. Instalar undetected-chromedriver:\n"
+                        f"   pip install undetected-chromedriver\n"
+                        f"4. Limpar cache:\n"
+                        f"   rm -rf ~/.wdm ~/.cache/selenium"
                     )
             
             # Injeta scripts avançados de stealth
