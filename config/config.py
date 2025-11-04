@@ -64,15 +64,15 @@ DATABASE_PATH = "blaze_data.db"
 # Formato: http://user:pass@host:port ou http://host:port
 # Se múltiplos proxies, separar por vírgula para rotação
 PROXY_URL = os.getenv("PROXY_URL", "")  # Ex: "http://proxy1:port,http://proxy2:port"
-PROXY_USERNAME = os.getenv("PROXY_USERNAME", "")
-PROXY_PASSWORD = os.getenv("PROXY_PASSWORD", "")
+PROXY_USERNAME = os.getenv("PROXY_USERNAME", " gabrielgadelham@gmail.com")
+PROXY_PASSWORD = os.getenv("PROXY_PASSWORD", "inDubai2023*")
 USE_PROXY = bool(PROXY_URL)
 
 # Telegram Bot (opcional)
 # Habilita automaticamente apenas se houver token e chat id válidos
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8487738643:AAHfnEEB6PKN6rDlRKrKkrh6HGRyTYtrge0")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "-1003285838290")
+TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "570272217")
 TELEGRAM_ENABLED = (
     os.getenv("TELEGRAM_ENABLED", "auto").lower() == "true"
     or (
