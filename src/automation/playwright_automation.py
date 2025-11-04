@@ -138,10 +138,24 @@ class BlazeAutomation:
                 timeout=60000  # 60 segundos
             )
             
+            # Randomiza viewport e user-agent entre perfis plausíveis
+            ua_pool = [
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+            ]
+            vp_pool = [
+                {'width': 1920, 'height': 1080},
+                {'width': 1600, 'height': 900},
+                {'width': 1366, 'height': 768},
+            ]
+            chosen_ua = random.choice(ua_pool)
+            chosen_vp = random.choice(vp_pool)
+
             # Cria contexto com configurações de stealth
             self.context = self.browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                viewport=chosen_vp,
+                user_agent=chosen_ua,
                 locale='pt-BR',
                 timezone_id='America/Sao_Paulo',
                 permissions=['notifications'],
@@ -278,6 +292,12 @@ class BlazeAutomation:
                     self._goto_with_retry(config.BLAZE_URL + '?modal=auth&tab=login', attempts=2)
                 except Exception:
                     pass
+            # Espera breve por rede ociosa e ciclo de humanização curto
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=3000)
+            except Exception:
+                pass
+            self.perform_human_tick()
 
             # Aguarda o modal de login
             try:
@@ -319,7 +339,7 @@ class BlazeAutomation:
                 return False
 
             # Pequena espera para Turnstile preencher token (se já liberado)
-            time.sleep(2)
+            time.sleep(random.uniform(2.0, 4.0))
 
             # Clica no botão "Entrar" do modal (type=button)
             try:
@@ -329,8 +349,25 @@ class BlazeAutomation:
             except Exception:
                 pass
 
-            # Aguarda navegação/estado logado
-            time.sleep(3)
+            # Aguarda navegação/estado logado e desafogo de rede
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=4000)
+            except Exception:
+                pass
+            time.sleep(random.uniform(1.0, 2.0))
+
+            # Se anti-bot detectado, tenta um pequeno ciclo de humanização e revalida
+            try:
+                if self.detect_antibot():
+                    for _ in range(random.randint(2, 4)):
+                        self.perform_human_tick()
+                        time.sleep(random.uniform(0.3, 0.7))
+                    try:
+                        self.page.wait_for_load_state('networkidle', timeout=3000)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             if self.check_if_logged_in():
                 return True
 
@@ -346,7 +383,16 @@ class BlazeAutomation:
         """Navega para o jogo Double"""
         try:
             self._goto_with_retry(config.DOUBLE_URL, attempts=3)
-            time.sleep(5)  # Aguarda alguns segundos para estabilizar
+            # Espera breve por rede ociosa
+            try:
+                self.page.wait_for_load_state('networkidle', timeout=5000)
+            except Exception:
+                pass
+            # Peq. humanização no warm-up inicial
+            for _ in range(random.randint(2, 4)):
+                self.perform_human_tick()
+                time.sleep(random.uniform(0.3, 0.8))
+            time.sleep(2)  # estabilização adicional
             return True
         except Exception as e:
             print(f"[AVISO] Erro ao navegar para Double: {e}")
@@ -1039,7 +1085,14 @@ class BlazeAutomation:
             try:
                 wait_until = 'domcontentloaded'
                 timeout_ms = base_timeout_ms + (i - 1) * 15000  # aumenta 15s por tentativa
-                return self.page.goto(url, wait_until=wait_until, timeout=timeout_ms)
+                nav = self.page.goto(url, wait_until=wait_until, timeout=timeout_ms)
+                # Tenta aguardar período breve de network idle e insere pausa humana
+                try:
+                    self.page.wait_for_load_state('networkidle', timeout=3000)
+                except Exception:
+                    pass
+                time.sleep(random.uniform(0.6, 1.6))
+                return nav
             except Exception as e:
                 last_error = e
                 print(f"[AVISO] goto falhou (tentativa {i}/{attempts}): {e}")
