@@ -424,7 +424,21 @@ class BlazeBot:
                         unresponsive = not self.automation.is_chrome_responsive(timeout=5.0)
                         inactive = (current_time - getattr(self.automation, 'last_activity_time', current_time)) > MAX_INACTIVITY_TIME
                         if (unresponsive or inactive) and current_time >= getattr(self, 'recovery_cooldown_until', 0):
-                            self.ui.print_warning("Chrome não está respondendo - tentando recuperar...")
+                            # Diagnóstico antes da recuperação
+                            try:
+                                diag = self.automation.get_diagnostic_summary()
+                                reason = diag.get('inferred_reason', 'unknown')
+                                antibot = diag.get('antibot_detected', False)
+                                hb = diag.get('last_heartbeat_elapsed', 0.0)
+                                self.ui.print_warning(f"Chrome não está respondendo - motivo provável: {reason} | antibot={antibot} | heartbeat={hb:.2f}s")
+                                if diag.get('last_response_status_error'):
+                                    self.ui.print_info(f"HTTP erro recente: {diag['last_response_status_error']}")
+                                if diag.get('last_request_fail'):
+                                    self.ui.print_info(f"Requisição falhou: {diag['last_request_fail']}")
+                                if diag.get('last_console_error'):
+                                    self.ui.print_info(f"Console error: {diag['last_console_error']}")
+                            except Exception:
+                                self.ui.print_warning("Chrome não está respondendo - tentando recuperar...")
                             
                             if not config.AUTO_RECOVERY_ENABLED:
                                 self.ui.print_warning("Recuperação automática desativada - mantendo sessão atual")

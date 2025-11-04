@@ -48,6 +48,15 @@ class BlazeAutomation:
         self.is_logged_in = False
         self.login_attempted = False
         self.last_activity_time = time.time()
+        # Diagnóstico
+        self.last_heartbeat_elapsed = 0.0
+        self.last_heartbeat_error = None
+        self.last_page_crash_time = None
+        self.last_page_close_time = None
+        self.last_request_fail = None
+        self.last_console_error = None
+        self.last_response_status_error = None
+        self.last_antibot_detected = False
         
         # Cache de resultados para performance
         self._results_cache = {
@@ -176,8 +185,18 @@ class BlazeAutomation:
             
             # Handlers para diagnosticar travamentos e fechamentos de página/contexto
             try:
-                self.page.on('crash', lambda _: print('[ERRO] Página crashou (event: crash)'))
-                self.page.on('close', lambda _: print('[AVISO] Página fechada (event: close)'))
+                self.page.on('crash', lambda _: (setattr(self, 'last_page_crash_time', time.time()), print('[ERRO] Página crashou (event: crash)')))
+                self.page.on('close', lambda _: (setattr(self, 'last_page_close_time', time.time()), print('[AVISO] Página fechada (event: close)')))
+                self.page.on('requestfailed', lambda req: setattr(self, 'last_request_fail', {
+                    'url': req.url,
+                    'failure': req.failure,
+                    'method': req.method
+                }))
+                self.page.on('response', lambda resp: (resp.status >= 400) and setattr(self, 'last_response_status_error', {
+                    'url': resp.url,
+                    'status': resp.status
+                }))
+                self.page.on('console', lambda msg: (msg.type == 'error') and setattr(self, 'last_console_error', msg.text))
             except Exception:
                 pass
 
@@ -594,6 +613,55 @@ class BlazeAutomation:
             return bool(changed)
         except Exception:
             return False
+
+    def detect_antibot(self) -> bool:
+        """Tenta detectar sinais de anti-bot/Cloudflare/Turnstile na página."""
+        try:
+            detected = self.page.evaluate("""
+                () => {
+                    const title = (document.title||'').toLowerCase();
+                    if (title.includes('attention required') || title.includes('checking your browser')) return true;
+                    if (document.querySelector('iframe[src*="challenges.cloudflare.com"], script[src*="turnstile"]')) return true;
+                    if (document.querySelector('[data-cf]') || document.querySelector('[data-challenge]')) return true;
+                    if (location.pathname.includes('challenge')) return true;
+                    return false;
+                }
+            """)
+            self.last_antibot_detected = bool(detected)
+            return self.last_antibot_detected
+        except Exception:
+            return False
+
+    def get_diagnostic_summary(self) -> dict:
+        """Resumo estruturado da possível causa de não-responsividade/fechamento."""
+        summary = {
+            'antibot_detected': False,
+            'last_heartbeat_elapsed': self.last_heartbeat_elapsed,
+            'last_heartbeat_error': self.last_heartbeat_error,
+            'page_crash_at': self.last_page_crash_time,
+            'page_close_at': self.last_page_close_time,
+            'last_request_fail': self.last_request_fail,
+            'last_response_status_error': self.last_response_status_error,
+            'last_console_error': self.last_console_error,
+            'inferred_reason': 'unknown'
+        }
+        try:
+            if self.detect_antibot():
+                summary['antibot_detected'] = True
+                summary['inferred_reason'] = 'anti-bot/Cloudflare'
+            elif self.last_page_crash_time:
+                summary['inferred_reason'] = 'page_crash'
+            elif self.last_page_close_time and (not self.page or self.page.is_closed()):
+                summary['inferred_reason'] = 'page_closed'
+            elif self.last_heartbeat_error:
+                summary['inferred_reason'] = 'heartbeat_error'
+            elif self.last_request_fail or (summary['last_response_status_error'] and summary['last_response_status_error'].get('status', 200) >= 500):
+                summary['inferred_reason'] = 'network_error'
+            elif summary['last_response_status_error'] and 400 <= summary['last_response_status_error'].get('status', 0) < 500:
+                summary['inferred_reason'] = 'http_client_error'
+        except Exception:
+            pass
+        return summary
     
     def check_if_logged_in(self) -> bool:
         """Verifica se está logado"""
@@ -630,11 +698,14 @@ class BlazeAutomation:
             elapsed = time.time() - start_t
             # Atualiza último heartbeat/atividade
             self.last_activity_time = time.time()
+            self.last_heartbeat_elapsed = elapsed
+            self.last_heartbeat_error = None
             # Se a resposta do heartbeat foi muito lenta, sinaliza degradação
             if elapsed > max(1.5, timeout * 0.8):
                 print(f"[AVISO] Heartbeat lento: {elapsed:.2f}s")
             return True
-        except Exception:
+        except Exception as e:
+            self.last_heartbeat_error = str(e)
             return False
     
     def restart_chrome(self) -> bool:
