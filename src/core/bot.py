@@ -431,21 +431,21 @@ class BlazeBot:
                                     # ainda em backoff
                                     pass
                                 else:
-                                # Recuperação suave (não recria Playwright)
-                                self.ui.print_info("Tentando recuperação suave do navegador...")
-                                if self.automation.reinitialize_with_login_retry(
-                                    email=config.EMAIL if config.EMAIL and config.PASSWORD else None,
-                                    password=config.PASSWORD if config.EMAIL and config.PASSWORD else None,
-                                    max_retries=1
-                                ):
-                                    self.ui.print_success("Navegador recuperado com sucesso")
+                                    # Recuperação suave (não recria Playwright)
+                                    self.ui.print_info("Tentando recuperação suave do navegador...")
+                                    if self.automation.reinitialize_with_login_retry(
+                                        email=config.EMAIL if config.EMAIL and config.PASSWORD else None,
+                                        password=config.PASSWORD if config.EMAIL and config.PASSWORD else None,
+                                        max_retries=1
+                                    ):
+                                        self.ui.print_success("Navegador recuperado com sucesso")
                                         recovery_attempts = 0
                                         next_recovery_allowed_at = 0
-                                    if not self.analyzer_thread.is_alive():
-                                        self.analyzer_thread = threading.Thread(target=self.analyzer_loop, daemon=True)
-                                        self.analyzer_thread.start()
-                                else:
-                                    self.ui.print_error("Falha na recuperação suave. Ignorando reinicialização completa para evitar conflito com asyncio.")
+                                        if not self.analyzer_thread.is_alive():
+                                            self.analyzer_thread = threading.Thread(target=self.analyzer_loop, daemon=True)
+                                            self.analyzer_thread.start()
+                                    else:
+                                        self.ui.print_error("Falha na recuperação suave. Ignorando reinicialização completa para evitar conflito com asyncio.")
                                         recovery_attempts += 1
                                         backoff = min(60.0, config.RECOVERY_BACKOFF_BASE * recovery_attempts)
                                         next_recovery_allowed_at = current_time + backoff
