@@ -717,6 +717,167 @@ class BlazeAutomation:
             return False
 
     # ===== Utilitários internos =====
+    # ===== Modal de Analytics (Padrões / Histórico) =====
+    def open_analytics_modal(self, tab: str = 'patterns') -> bool:
+        """Abre o modal de analytics e seleciona a aba desejada: 'patterns' ou 'history'."""
+        try:
+            # Abre diretamente o modal via parâmetro se possível
+            try:
+                self._goto_with_retry(config.DOUBLE_URL + '?modal=double_history-v2_index&roomId=1', attempts=1)
+                time.sleep(1.5)
+            except Exception:
+                pass
+
+            # Garante existência do modal
+            self.page.wait_for_selector('#double-analytics', timeout=5000)
+
+            # Seleciona a aba
+            if tab == 'patterns':
+                btn = self.page.query_selector('.tabs-crash-analytics .tab:has-text("Padrões")')
+                if btn:
+                    btn.click()
+            else:
+                btn = self.page.query_selector('.tabs-crash-analytics .tab:has-text("Histórico")')
+                if btn:
+                    btn.click()
+            time.sleep(0.5)
+            return True
+        except Exception:
+            return False
+
+    def set_analytics_rounds(self, rounds: int = 100) -> bool:
+        """Seleciona a quantidade de rodadas no select do modal (25,50,100,500,3000)."""
+        try:
+            sel = self.page.wait_for_selector('#double-analytics .select-menu select', timeout=3000)
+            if not sel:
+                return False
+            value = str(rounds) if str(rounds) in {'25','50','100','500','3000'} else '100'
+            sel.select_option(value=value)
+            time.sleep(0.3)
+            return True
+        except Exception:
+            return False
+
+    def get_patterns_numbers_percentages(self) -> dict:
+        """Extrai o bloco "Número percentual" -> {numero:int -> percent:float}."""
+        try:
+            data = self.page.evaluate("""
+                () => {
+                    const result = {};
+                    const container = Array.from(document.querySelectorAll('#double-analytics .roll-title'))
+                      .find(el => (el.innerText||'').toLowerCase().includes('número percentual'));
+                    if (!container) return result;
+                    const roll = container.nextElementSibling;
+                    if (!roll) return result;
+                    const items = roll.querySelectorAll('.roll__container');
+                    items.forEach(it => {
+                        const numEl = it.querySelector('.roll__square span');
+                        const pctEl = it.querySelector('p');
+                        if (!numEl || !pctEl) return;
+                        const numTxt = (numEl.innerText||'').trim();
+                        const pctTxt = (pctEl.innerText||'').replace('%','').replace(',','.');
+                        const n = /^\d+$/.test(numTxt) ? parseInt(numTxt) : (numTxt==='0' ? 0 : null);
+                        const v = parseFloat(pctTxt.replace(/[^0-9\.]/g,''));
+                        if (n !== null && !Number.isNaN(v)) result[n] = v;
+                    });
+                    return result;
+                }
+            """)
+            return data or {}
+        except Exception:
+            return {}
+
+    def get_patterns_parity(self) -> dict:
+        """Extrai Par/Ímpar -> {'even':%, 'odd':%}."""
+        try:
+            data = self.page.evaluate("""
+                () => {
+                    const out = { even: null, odd: null };
+                    const charts = Array.from(document.querySelectorAll('#double-analytics .chart'));
+                    const block = charts.find(c => (c.querySelector('.chart__title')?.innerText||'').toLowerCase().includes('chance / par'));
+                    if (!block) return out;
+                    const rows = block.querySelectorAll('.chart__bar_container');
+                    rows.forEach(r => {
+                        const title = (r.querySelector('.chart__bar__title')?.innerText||'').toLowerCase();
+                        const valTxt = (r.querySelector('.chart__bar__value')?.innerText||'').replace('%','').replace(',','.');
+                        const v = parseFloat(valTxt);
+                        if (title.includes('par')) out.even = v;
+                        if (title.includes('ímpar') || title.includes('impar')) out.odd = v;
+                    });
+                    return out;
+                }
+            """)
+            return data or { 'even': None, 'odd': None }
+        except Exception:
+            return { 'even': None, 'odd': None }
+
+    def get_patterns_high_low(self) -> dict:
+        """Extrai Alto/Baixo -> {'high':%, 'low':%}."""
+        try:
+            data = self.page.evaluate("""
+                () => {
+                    const out = { high: null, low: null };
+                    const charts = Array.from(document.querySelectorAll('#double-analytics .chart'));
+                    const block = charts.find(c => (c.querySelector('.chart__title')?.innerText||'').toLowerCase().includes('alto / baixo'));
+                    if (!block) return out;
+                    const rows = block.querySelectorAll('.chart__bar_container');
+                    rows.forEach(r => {
+                        const title = (r.querySelector('.chart__bar__title')?.innerText||'').toLowerCase();
+                        const valTxt = (r.querySelector('.chart__bar__value')?.innerText||'').replace('%','').replace(',','.');
+                        const v = parseFloat(valTxt);
+                        if (title.includes('alto')) out.high = v;
+                        if (title.includes('baixo')) out.low = v;
+                    });
+                    return out;
+                }
+            """)
+            return data or { 'high': None, 'low': None }
+        except Exception:
+            return { 'high': None, 'low': None }
+
+    def get_history_latest(self, limit: int = 25) -> list:
+        """Extrai a lista do Histórico no modal (necessita aba 'Histórico' ativa)."""
+        try:
+            items = self.page.evaluate("""
+                (limit) => {
+                    const out = [];
+                    const rows = document.querySelectorAll('#double-analytics #history__double .history__double__container');
+                    for (let i = 0; i < rows.length && out.length < limit; i++) {
+                        const row = rows[i];
+                        const itemEl = row.querySelector('.history__double__item');
+                        if (!itemEl) continue;
+                        let color = null;
+                        const cls = itemEl.className || '';
+                        if (cls.includes('--red')) color = 'red';
+                        else if (cls.includes('--black')) color = 'black';
+                        else if (cls.includes('--white')) color = 'white';
+                        let number = null;
+                        const center = itemEl.querySelector('.history__double__center');
+                        if (center) {
+                            const numTxt = (center.innerText||'').trim();
+                            if (/^\d+$/.test(numTxt)) number = parseInt(numTxt);
+                        } else if (color === 'white') {
+                            number = 0;
+                        }
+                        const dateEl = row.querySelector('.history__double__date');
+                        let date = null, time = null;
+                        if (dateEl) {
+                            const ps = dateEl.querySelectorAll('p');
+                            if (ps && ps.length >= 2) {
+                                date = (ps[0].innerText||'').trim();
+                                time = (ps[1].innerText||'').trim();
+                            }
+                        }
+                        out.push({ color, number, date, time });
+                    }
+                    return out;
+                }
+            """, int(max(1, min(300, limit))))
+            # Normaliza números/cores
+            return [normalize_result(it) for it in (items or [])]
+        except Exception:
+            return []
+
     def _goto_with_retry(self, url: str, attempts: int = 3, base_timeout_ms: int = 60000):
         """Abre URL com backoff e espera menos agressiva (domcontentloaded)."""
         last_error = None
