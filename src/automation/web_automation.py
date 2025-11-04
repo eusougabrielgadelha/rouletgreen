@@ -176,12 +176,13 @@ class BlazeAutomation:
                     }
                     options.add_experimental_option("prefs", prefs)
                     
-                    # Inicializa undetected-chromedriver
+                    # Inicializa undetected-chromedriver com timeout maior
                     self.driver = uc.Chrome(
                         options=options,
                         version_main=None,  # Auto-detecta versão do Chrome
                         use_subprocess=True,
-                        driver_executable_path=None
+                        driver_executable_path=None,
+                        timeout=60  # Timeout maior para servidor headless
                     )
                     
                     print("[SUCCESS] undetected-chromedriver inicializado com sucesso!")
